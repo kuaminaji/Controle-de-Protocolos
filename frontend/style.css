@@ -22,10 +22,13 @@
   --color-dark: #0b1220;
   --color-secondary-text: #213244;
   --color-ui-text: #415072;
+  --primary-light-bg: #f0f7ff;
+  --primary-shadow: rgba(21,101,216,0.15);
   
   /* Borders */
   --border-light: 1px solid rgba(11,35,64,0.06);
   --border-lighter: 1px solid #ddd;
+  --border-highlight: 2px solid var(--primary);
   
   /* Gradients */
   --gradient-light: linear-gradient(180deg,#ffffff,#fbfdff);
@@ -38,6 +41,7 @@
   /* Spacing */
   --padding-input: 12px 14px;
   --padding-btn: 10px 16px;
+  --padding-input-large: 14px;
 }
 
 *{box-sizing:border-box}
@@ -529,24 +533,24 @@ form button:hover { transform: translateY(-3px); }
 }
 
 /* ====================== [BUSCA GLOBAL - DESTAQUE] ====================== */
-.busca-global-container {
-  flex: 2 !important;
-  min-width: 350px !important;
+#form-busca .busca-global-container {
+  flex: 2;
+  min-width: 350px;
 }
 
-.busca-global-container label {
-  font-size: 1.1em !important;
-  font-weight: 700 !important;
-  color: var(--primary) !important;
-  margin-bottom: 8px !important;
-  display: block !important;
+#form-busca .busca-global-container label {
+  font-size: 1.1em;
+  font-weight: 700;
+  color: var(--primary);
+  margin-bottom: 8px;
+  display: block;
 }
 
-.busca-global-container input {
-  width: 100% !important;
-  padding: 14px !important;
-  font-size: 1.05rem !important;
-  border: 2px solid var(--primary) !important;
-  background: #f0f7ff !important;
-  box-shadow: 0 4px 12px rgba(21,101,216,0.15) !important;
+#form-busca .busca-global-container input {
+  width: 100%;
+  padding: var(--padding-input-large);
+  font-size: 1.05rem;
+  border: var(--border-highlight);
+  background: var(--primary-light-bg);
+  box-shadow: 0 4px 12px var(--primary-shadow);
 }
