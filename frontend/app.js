@@ -1772,9 +1772,12 @@ function navegar(pagina) {
               <label>Nome do Requerente *</label>
               <input type="text" id="nome-requerente" name="nome_requerente" maxlength="60" required style="width:100%;">
             </div>
-            <div style="width:300px;">
-              <label>Título/Assunto *</label>
-              <input type="text" id="titulo" name="titulo" maxlength="120" required style="width:100%;">
+            <div style="width:220px;">
+              <label>Categoria *</label>
+              <select id="categoria" name="categoria" required style="width:100%;">
+                <option value="">Selecione</option>
+                ${CATEGORIA_OPTIONS.map(c => `<option>${esc(c)}</option>`).join('')}
+              </select>
             </div>
           </div>
           
@@ -1783,18 +1786,15 @@ function navegar(pagina) {
               <label>Nome da parte no ato</label>
               <input type="text" id="nome-parte-ato" name="nome_parte_ato" maxlength="120" style="width:100%;">
             </div>
+            <div style="width:300px;">
+              <label>Título/Assunto *</label>
+              <input type="text" id="titulo" name="titulo" maxlength="120" required style="width:100%;">
+            </div>
             <div style="width:220px;">
               <label>Status *</label>
               <select id="status" name="status" required style="width:100%;">
                 <option value="">Selecione</option>
                 ${STATUS_OPTIONS.map(s => `<option>${esc(s)}</option>`).join('')}
-              </select>
-            </div>
-            <div style="width:220px;">
-              <label>Categoria *</label>
-              <select id="categoria" name="categoria" required style="width:100%;">
-                <option value="">Selecione</option>
-                ${CATEGORIA_OPTIONS.map(c => `<option>${esc(c)}</option>`).join('')}
               </select>
             </div>
           </div>
@@ -2906,6 +2906,7 @@ function montarFormularioEditar(p) {
       <div style="margin-top:20px;display:flex;gap:12px;flex-wrap:wrap;">
         <button type="submit" id="btn-salvar-editar">💾 Salvar Alterações</button>
         <button type="button" id="btn-ver-historico">📋 Ver histórico</button>
+        <button type="button" id="btn-enviar-whatsapp" style="background:#25D366;color:white;">📱 Enviar Mensagem WhatsApp</button>
         <button type="button" id="voltar-menu-editar-form">← Voltar ao Menu</button>
       </div>
     </form>
@@ -3041,6 +3042,7 @@ function montarFormularioEditar(p) {
   };
   
   document.getElementById("btn-ver-historico").onclick = () => verHistorico(p.id);
+  document.getElementById("btn-enviar-whatsapp").onclick = () => enviarWhatsApp(p);
   document.getElementById("voltar-menu-editar-form").onclick = menuInicial;
 }
 
@@ -3120,6 +3122,21 @@ async function verHistorico(id) {
   } catch {
     historicoLista.innerHTML = '<div style="color:#dc3545;text-align:center;">Falha ao carregar histórico.</div>';
   }
+}
+
+// ====================== [BLOCO 21.5: ENVIAR WHATSAPP] ====================== //
+function enviarWhatsApp(protocolo) {
+  // Criar mensagem com dados do protocolo
+  const mensagem = `*Protocolo: ${protocolo.numero}*%0A` +
+    `Requerente: ${protocolo.nome_requerente}%0A` +
+    `CPF: ${formatCpf(protocolo.cpf)}%0A` +
+    `Título: ${protocolo.titulo}%0A` +
+    `Status: ${protocolo.status}%0A` +
+    `Categoria: ${protocolo.categoria}`;
+  
+  // Abrir WhatsApp Web com a mensagem
+  const url = `https://wa.me/?text=${mensagem}`;
+  window.open(url, '_blank');
 }
 
 // ====================== [BLOCO 22: CARREGAR PARA EXCLUIR] ====================== //
