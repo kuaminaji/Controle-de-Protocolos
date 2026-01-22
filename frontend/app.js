@@ -812,8 +812,13 @@ function setupUppercaseInput(inputEl) {
 // WhatsApp message template constant
 const WHATSAPP_MESSAGE_TEMPLATE = (nomeRequerente, numeroProtocolo, nomeParteAto, nomeUsuario) => 
   `Olá, *${nomeRequerente}.*
+
 O Protocolo nº *${numeroProtocolo}* em nome de: *${nomeParteAto}* foi finalizado e está pronto para ser retirado.
-Para a retirada, é necessário apresentar o protocolo original. Caso tenha perdido o documento, a retirada poderá ser feita apenas pelo titular da solicitação, mediante apresentação de documento com foto.
+
+Para a retirada, é necessário apresentar o protocolo original.
+
+Caso tenha perdido o documento, a retirada poderá ser feita apenas pelo titular da solicitação, mediante apresentação de documento com foto.
+
 Atenciosamente,
 ${nomeUsuario}`;
 
@@ -1846,6 +1851,10 @@ function navegar(pagina) {
           </div>
           
           <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap;">
+            <div style="flex:1;min-width:250px;">
+              <label>Nome do Requerente *</label>
+              <input type="text" id="nome-requerente" name="nome_requerente" maxlength="60" required style="width:100%;">
+            </div>
             <div style="width:220px;">
               <label>CPF *</label>
               <input type="text" id="cpf-incluir" name="cpf" maxlength="14" required 
@@ -1854,23 +1863,8 @@ function navegar(pagina) {
             </div>
             <div style="width:220px;">
               <label>WhatsApp</label>
-              <input type="text" id="whatsapp-incluir" name="whatsapp" maxlength="20" 
+              <input type="text" id="whatsapp-incluir" name="whatsapp" maxlength="20" value="+5524"
                      inputmode="numeric" placeholder="+55(00) 00000-0000" style="width:100%;">
-            </div>
-            <div style="flex:1;min-width:250px;">
-              <label>Nome do Requerente *</label>
-              <input type="text" id="nome-requerente" name="nome_requerente" maxlength="60" required style="width:100%;">
-            </div>
-            <div style="width:300px;">
-              <label>Título/Assunto *</label>
-              <input type="text" id="titulo" name="titulo" maxlength="120" required style="width:100%;">
-            </div>
-          </div>
-          
-          <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap;">
-            <div style="flex:1;min-width:250px;">
-              <label>Nome da parte no ato</label>
-              <input type="text" id="nome-parte-ato" name="nome_parte_ato" maxlength="120" style="width:100%;">
             </div>
             <div style="width:220px;">
               <label>Status *</label>
@@ -1885,6 +1879,17 @@ function navegar(pagina) {
                 <option value="">Selecione</option>
                 ${CATEGORIA_OPTIONS.map(c => `<option>${esc(c)}</option>`).join('')}
               </select>
+            </div>
+          </div>
+          
+          <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap;">
+            <div style="width:300px;">
+              <label>Título/Assunto *</label>
+              <input type="text" id="titulo" name="titulo" maxlength="120" required style="width:100%;">
+            </div>
+            <div style="flex:1;min-width:250px;">
+              <label>Nome da parte no ato</label>
+              <input type="text" id="nome-parte-ato" name="nome_parte_ato" maxlength="120" style="width:100%;">
             </div>
           </div>
           
