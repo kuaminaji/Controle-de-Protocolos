@@ -2796,6 +2796,9 @@ function montarFormularioEditar(p) {
           <input type="text" id="cpf-editar" name="cpf" value="${esc(formatCpf(p.cpf))}" maxlength="14" required style="width:100%;">
           <div id="cpf-editar-feedback" class="campo-feedback hint">Informe 11 dígitos</div>
         </div>
+      </div>
+      
+      <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap;">
         <div style="width:220px;">
           <label>Status *</label>
           <select id="editar-status" name="status" required style="width:100%;">
@@ -2904,9 +2907,13 @@ function montarFormularioEditar(p) {
       </div>
       
       <div style="margin-top:20px;display:flex;gap:12px;flex-wrap:wrap;">
+        <button type="button" id="btn-whatsapp-mensagem">💬 Enviar Mensagem WhatsApp</button>
+        <button type="button" id="voltar-menu-editar-form">← Voltar ao Menu</button>
+      </div>
+      
+      <div style="margin-top:12px;display:flex;gap:12px;flex-wrap:wrap;">
         <button type="submit" id="btn-salvar-editar">💾 Salvar Alterações</button>
         <button type="button" id="btn-ver-historico">📋 Ver histórico</button>
-        <button type="button" id="voltar-menu-editar-form">← Voltar ao Menu</button>
       </div>
     </form>
     <div id="historico-lista" style="margin-top:20px;"></div>
@@ -3042,6 +3049,26 @@ function montarFormularioEditar(p) {
   
   document.getElementById("btn-ver-historico").onclick = () => verHistorico(p.id);
   document.getElementById("voltar-menu-editar-form").onclick = menuInicial;
+  
+  // WhatsApp button handler
+  document.getElementById("btn-whatsapp-mensagem").onclick = function() {
+    const numero = p.numero || '';
+    const nomeRequerente = p.nome_requerente || '';
+    const titulo = p.titulo || '';
+    const status = p.status || '';
+    
+    // Format the message
+    const mensagem = encodeURIComponent(
+      `📋 *Protocolo ${numero}*\n\n` +
+      `👤 Requerente: ${nomeRequerente}\n` +
+      `📄 Assunto: ${titulo}\n` +
+      `📊 Status: ${status}\n\n` +
+      `Para mais informações, entre em contato com nosso atendimento.`
+    );
+    
+    // Open WhatsApp Web or App
+    window.open(`https://wa.me/?text=${mensagem}`, '_blank');
+  };
 }
 
 // ====================== [BLOCO 21: HISTÓRICO DETALHADO] ====================== //
