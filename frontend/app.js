@@ -1978,10 +1978,10 @@ function navegar(pagina) {
         
         <form id="form-busca" autocomplete="off" style="max-width:1100px;">
           <div style="display:flex;gap:12px;margin-bottom:8px;flex-wrap:wrap;">
-            <div style="flex:1;min-width:250px;">
+            <div class="busca-global-container" style="flex:1;min-width:250px;">
               <label>Busca global</label>
               <input type="text" id="buscar-palavra" maxlength="50" 
-                     placeholder="Qualquer termo, número, nome, título..." style="width:100;">
+                     placeholder="Qualquer termo, número, nome, título..." style="width:100%;">
             </div>
             <div style="width:220px;">
               <label>Número do Protocolo</label>

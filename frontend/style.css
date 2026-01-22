@@ -197,6 +197,7 @@ body {
   bottom:0;
   z-index:2000;
   transition: transform var(--transition-slow);
+  overflow-y: auto;
 }
 .menu-top { display:flex; gap:12px; align-items:center; margin-bottom:18px; }
 .menu-logo { width:48px; height:48px; border-radius:var(--radius-md); object-fit:cover; }
@@ -525,4 +526,27 @@ form button:hover { transform: translateY(-3px); }
   50% {
     transform: translateY(-20px);
   }
+}
+
+/* ====================== [BUSCA GLOBAL - DESTAQUE] ====================== */
+.busca-global-container {
+  flex: 2 !important;
+  min-width: 350px !important;
+}
+
+.busca-global-container label {
+  font-size: 1.1em !important;
+  font-weight: 700 !important;
+  color: var(--primary) !important;
+  margin-bottom: 8px !important;
+  display: block !important;
+}
+
+.busca-global-container input {
+  width: 100% !important;
+  padding: 14px !important;
+  font-size: 1.05rem !important;
+  border: 2px solid var(--primary) !important;
+  background: #f0f7ff !important;
+  box-shadow: 0 4px 12px rgba(21,101,216,0.15) !important;
 }
