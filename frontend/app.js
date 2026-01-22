@@ -3147,7 +3147,7 @@ function enviarWhatsApp(protocolo) {
   ];
   const mensagem = linhas.join('\n');
   
-  // Validar tamanho da mensagem (limite do WhatsApp ~2048 caracteres)
+  // Validar tamanho da mensagem (limite conservador de 2000 caracteres)
   if (mensagem.length > 2000) {
     mostrarMensagem('A mensagem é muito longa para enviar via WhatsApp. Por favor, reduza o conteúdo.', 'erro');
     return;
