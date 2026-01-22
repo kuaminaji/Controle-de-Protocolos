@@ -94,6 +94,7 @@ class ProtocoloModel(BaseModel):
     numero: str = Field(..., min_length=5, max_length=10, description="Número do protocolo, 5-10 dígitos numéricos.")
     nome_requerente: str = Field(..., max_length=60)
     cpf: str = Field(..., min_length=11, max_length=14)
+    whatsapp: str = Field(default="", max_length=20)
     titulo: str = Field(..., max_length=120)
     nome_parte_ato: str = Field(default="", max_length=120)
     outras_infos: str = Field(default="", max_length=120)
@@ -675,6 +676,12 @@ def incluir_protocolo(protocolo: ProtocoloModel):
     if categoria == "IDT":
         categoria = "RTD"
     cpf = apenas_digitos(cpf_raw)
+    
+    # Convert names to uppercase
+    nome_requerente = protocolo.nome_requerente.strip().upper()
+    nome_parte_ato = protocolo.nome_parte_ato.strip().upper()
+    whatsapp = apenas_digitos(protocolo.whatsapp.strip()) if protocolo.whatsapp else ""
+    
     if len(numero) != 5:
         raise HTTPException(status_code=400, detail="Número do protocolo deve conter exatamente 5 dígitos.")
     if not validar_cpf(cpf):
@@ -695,6 +702,9 @@ def incluir_protocolo(protocolo: ProtocoloModel):
         novo["observacoes"] = re.sub(r"<br\s*/?>", "\n", novo["observacoes"])
     novo["numero"] = numero
     novo["cpf"] = cpf
+    novo["whatsapp"] = whatsapp
+    novo["nome_requerente"] = nome_requerente
+    novo["nome_parte_ato"] = nome_parte_ato
     novo["status"] = status
     novo["categoria"] = categoria
     novo["ultima_alteracao_nome"] = protocolo.ultima_alteracao_nome or protocolo.responsavel or ""
@@ -975,6 +985,15 @@ def editar_protocolo(id: str, protocolo: dict):
         if not validar_cpf(cpf_new):
             raise HTTPException(status_code=400, detail="CPF inválido. Informe um CPF válido.")
         atualizacao["cpf"] = cpf_new
+    
+    # Convert names to uppercase
+    if "nome_requerente" in atualizacao:
+        atualizacao["nome_requerente"] = str(atualizacao["nome_requerente"]).strip().upper()
+    if "nome_parte_ato" in atualizacao:
+        atualizacao["nome_parte_ato"] = str(atualizacao["nome_parte_ato"]).strip().upper()
+    if "whatsapp" in atualizacao:
+        atualizacao["whatsapp"] = apenas_digitos(str(atualizacao.get("whatsapp", "")))
+    
     if "status" in atualizacao:
         status_novo = str(atualizacao["status"]).strip()
         if status_novo not in ALLOWED_STATUS:

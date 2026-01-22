@@ -776,6 +776,70 @@ function attachCpfMask(elOrId) {
   el.addEventListener("input", () => el.value = formatCpf(el.value));
 }
 
+// WhatsApp formatting functions
+function formatWhatsApp(value) {
+  const d = somenteDigitos(value).slice(0, 13); // +55 + 11 digits max
+  if (d.length === 0) return "";
+  if (d.length <= 2) return `+${d}`;
+  if (d.length <= 4) return `+${d.slice(0,2)}(${d.slice(2)}`;
+  if (d.length <= 9) return `+${d.slice(0,2)}(${d.slice(2,4)}) ${d.slice(4)}`;
+  return `+${d.slice(0,2)}(${d.slice(2,4)}) ${d.slice(4,9)}-${d.slice(9)}`;
+}
+
+function setupWhatsAppInput(inputEl) {
+  if (!inputEl) return;
+  inputEl.addEventListener("input", () => {
+    inputEl.value = formatWhatsApp(inputEl.value);
+  });
+}
+
+function attachWhatsAppMask(elOrId) {
+  const el = typeof elOrId === 'string' ? document.getElementById(elOrId) : elOrId;
+  if (!el) return;
+  el.addEventListener("input", () => el.value = formatWhatsApp(el.value));
+}
+
+// Function to send WhatsApp message
+function enviarMensagemWhatsApp(protocolo) {
+  const sessao = getSessao();
+  if (!sessao) {
+    mostrarMensagem("Sessão expirada", "erro");
+    return;
+  }
+  
+  const nomeRequerente = protocolo.nome_requerente || "NÃO INFORMADO";
+  const numeroProtocolo = protocolo.numero || "NÃO INFORMADO";
+  const nomeParteAto = protocolo.nome_parte_ato || "NÃO INFORMADO";
+  const nomeUsuario = sessao.usuario || "NÃO INFORMADO";
+  const whatsapp = protocolo.whatsapp || "";
+  
+  if (!whatsapp) {
+    mostrarMensagem("Número do WhatsApp não cadastrado para este protocolo.", "erro");
+    return;
+  }
+  
+  // Format phone number - remove all non-digits
+  const phoneNumber = somenteDigitos(whatsapp);
+  
+  // Create message with proper formatting for WhatsApp
+  const mensagem = `Olá, *${nomeRequerente}.*
+O Protocolo nº *${numeroProtocolo}* em nome de: *${nomeParteAto}* foi finalizado e está pronto para ser retirado.
+Para a retirada, é necessário apresentar o protocolo original. Caso tenha perdido o documento, a retirada poderá ser feita apenas pelo titular da solicitação, mediante apresentação de documento com foto.
+Atenciosamente,
+${nomeUsuario}`;
+  
+  // Encode message for URL
+  const mensagemEncoded = encodeURIComponent(mensagem);
+  
+  // Open WhatsApp Web/Desktop with pre-filled message
+  const whatsappUrl = `https://web.whatsapp.com/send?phone=${phoneNumber}&text=${mensagemEncoded}`;
+  
+  // Open in new window
+  window.open(whatsappUrl, '_blank');
+  
+  mostrarMensagem("Abrindo WhatsApp com mensagem pré-preenchida...", "sucesso", 3000);
+}
+
 /* ====================== [BLOCO 7: VALIDAÇÃO GENÉRICA E FEEDBACK] ====================== */
 function validarCamposObrigatorios(campos) {
   return campos.every(id => {
@@ -1768,6 +1832,11 @@ function navegar(pagina) {
                      inputmode="numeric" placeholder="000.000.000-00" style="width:100%;">
               <div id="cpf-incluir-feedback" class="campo-feedback hint">Informe 11 dígitos</div>
             </div>
+            <div style="width:220px;">
+              <label>WhatsApp</label>
+              <input type="text" id="whatsapp-incluir" name="whatsapp" maxlength="20" 
+                     inputmode="numeric" placeholder="+55(00) 00000-0000" style="width:100%;">
+            </div>
             <div style="flex:1;min-width:250px;">
               <label>Nome do Requerente *</label>
               <input type="text" id="nome-requerente" name="nome_requerente" maxlength="60" required style="width:100%;">
@@ -1888,6 +1957,28 @@ function navegar(pagina) {
     const cpfFeedback = document.getElementById("cpf-incluir-feedback");
     setupCpfInput(cpfInput, cpfFeedback, btnSalvarIncluir);
     
+    // Configuração do WhatsApp
+    const whatsappInput = document.getElementById("whatsapp-incluir");
+    setupWhatsAppInput(whatsappInput);
+    
+    // Auto-uppercase para Nome do Requerente e Nome da Parte no Ato
+    const nomeRequerenteInput = document.getElementById("nome-requerente");
+    const nomeParteAtoInput = document.getElementById("nome-parte-ato");
+    
+    nomeRequerenteInput.addEventListener("input", function() {
+      const start = this.selectionStart;
+      const end = this.selectionEnd;
+      this.value = this.value.toUpperCase();
+      this.setSelectionRange(start, end);
+    });
+    
+    nomeParteAtoInput.addEventListener("input", function() {
+      const start = this.selectionStart;
+      const end = this.selectionEnd;
+      this.value = this.value.toUpperCase();
+      this.setSelectionRange(start, end);
+    });
+    
     // Auto-preenchimento do nome do requerente
     cpfInput.addEventListener("blur", async () => {
       const cpf = somenteDigitos(cpfInput.value);
@@ -1922,6 +2013,9 @@ function navegar(pagina) {
         mostrarMensagem("CPF inválido.", "erro");
         return;
       }
+      
+      // Process WhatsApp number
+      dados.whatsapp = somenteDigitos(dados.whatsapp || "");
       
       dados.ultima_alteracao_nome = sessao.usuario;
       mostrarLoader("Salvando protocolo...");
@@ -2796,6 +2890,10 @@ function montarFormularioEditar(p) {
           <input type="text" id="cpf-editar" name="cpf" value="${esc(formatCpf(p.cpf))}" maxlength="14" required style="width:100%;">
           <div id="cpf-editar-feedback" class="campo-feedback hint">Informe 11 dígitos</div>
         </div>
+        <div style="width:200px;">
+          <label>WhatsApp</label>
+          <input type="text" id="whatsapp-editar" name="whatsapp" value="${esc(formatWhatsApp(p.whatsapp || ''))}" maxlength="20" inputmode="numeric" placeholder="+55(00) 00000-0000" style="width:100%;">
+        </div>
         <div style="width:220px;">
           <label>Status *</label>
           <select id="editar-status" name="status" required style="width:100%;">
@@ -2903,10 +3001,15 @@ function montarFormularioEditar(p) {
         </div>
       </div>
       
-      <div style="margin-top:20px;display:flex;gap:12px;flex-wrap:wrap;">
+      <div style="margin-top:20px;display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
         <button type="submit" id="btn-salvar-editar">💾 Salvar Alterações</button>
         <button type="button" id="btn-ver-historico">📋 Ver histórico</button>
         <button type="button" id="voltar-menu-editar-form">← Voltar ao Menu</button>
+        ${p.status === 'Concluído' && p.whatsapp ? `
+          <button type="button" id="btn-enviar-whatsapp" style="background:#25D366;color:white;margin-left:auto;">
+            📱 Enviar Mensagem WhatsApp
+          </button>
+        ` : ''}
       </div>
     </form>
     <div id="historico-lista" style="margin-top:20px;"></div>
@@ -2943,6 +3046,42 @@ function montarFormularioEditar(p) {
   const cpfInput = document.getElementById("cpf-editar");
   const feedback = document.getElementById("cpf-editar-feedback");
   setupCpfInput(cpfInput, feedback);
+
+  // Configurar WhatsApp
+  const whatsappInput = document.getElementById("whatsapp-editar");
+  if (whatsappInput) {
+    setupWhatsAppInput(whatsappInput);
+  }
+  
+  // Auto-uppercase para Nome do Requerente e Nome da Parte no Ato
+  const nomeRequerenteInput = document.getElementById("editar-nome-requerente");
+  const nomeParteAtoInput = document.getElementById("editar-nome-parte-ato");
+  
+  if (nomeRequerenteInput) {
+    nomeRequerenteInput.addEventListener("input", function() {
+      const start = this.selectionStart;
+      const end = this.selectionEnd;
+      this.value = this.value.toUpperCase();
+      this.setSelectionRange(start, end);
+    });
+  }
+  
+  if (nomeParteAtoInput) {
+    nomeParteAtoInput.addEventListener("input", function() {
+      const start = this.selectionStart;
+      const end = this.selectionEnd;
+      this.value = this.value.toUpperCase();
+      this.setSelectionRange(start, end);
+    });
+  }
+  
+  // WhatsApp button handler
+  const btnEnviarWhatsapp = document.getElementById("btn-enviar-whatsapp");
+  if (btnEnviarWhatsapp) {
+    btnEnviarWhatsapp.onclick = function() {
+      enviarMensagemWhatsApp(p);
+    };
+  }
 
   // ADICIONAR EVENTO PARA O BOTÃO DE INCLUIR EXIGÊNCIA
   document.getElementById("btn-incluir-exigencia").onclick = function() {
@@ -3007,6 +3146,7 @@ function montarFormularioEditar(p) {
     let dados = Object.fromEntries(new FormData(e.target).entries());
     delete dados.responsavel;
     dados.cpf = somenteDigitos(dados.cpf);
+    dados.whatsapp = somenteDigitos(dados.whatsapp || "");
     
     // Validar retirada
     const rp = (dados.retirado_por || "").trim();
