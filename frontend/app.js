@@ -3136,16 +3136,26 @@ async function verHistorico(id) {
  * @param {string} protocolo.categoria - Protocol category
  */
 function enviarWhatsApp(protocolo) {
-  // Criar mensagem com dados do protocolo (properly encoded)
-  const mensagem = `*Protocolo: ${encodeURIComponent(protocolo.numero)}*%0A` +
-    `Requerente: ${encodeURIComponent(protocolo.nome_requerente)}%0A` +
-    `CPF: ${encodeURIComponent(formatCpf(protocolo.cpf))}%0A` +
-    `Título: ${encodeURIComponent(protocolo.titulo)}%0A` +
-    `Status: ${encodeURIComponent(protocolo.status)}%0A` +
-    `Categoria: ${encodeURIComponent(protocolo.categoria)}`;
+  // Criar mensagem com dados do protocolo
+  const linhas = [
+    `*Protocolo: ${protocolo.numero}*`,
+    `Requerente: ${protocolo.nome_requerente}`,
+    `CPF: ${formatCpf(protocolo.cpf)}`,
+    `Título: ${protocolo.titulo}`,
+    `Status: ${protocolo.status}`,
+    `Categoria: ${protocolo.categoria}`
+  ];
+  const mensagem = linhas.join('\n');
   
-  // Abrir WhatsApp Web com a mensagem
-  const url = `https://wa.me/?text=${mensagem}`;
+  // Validar tamanho da mensagem (limite do WhatsApp ~2048 caracteres)
+  if (mensagem.length > 2000) {
+    mostrarMensagem('A mensagem é muito longa para enviar via WhatsApp. Por favor, reduza o conteúdo.', 'erro');
+    return;
+  }
+  
+  // Abrir WhatsApp Web com a mensagem usando URLSearchParams
+  const params = new URLSearchParams({ text: mensagem });
+  const url = `https://wa.me/?${params.toString()}`;
   window.open(url, '_blank');
 }
 
