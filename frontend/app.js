@@ -3125,14 +3125,24 @@ async function verHistorico(id) {
 }
 
 // ====================== [BLOCO 21.5: ENVIAR WHATSAPP] ====================== //
+/**
+ * Opens WhatsApp Web with a pre-formatted message containing protocol information
+ * @param {Object} protocolo - The protocol object containing protocol details
+ * @param {string} protocolo.numero - Protocol number
+ * @param {string} protocolo.nome_requerente - Name of the requester
+ * @param {string} protocolo.cpf - CPF of the requester
+ * @param {string} protocolo.titulo - Protocol title/subject
+ * @param {string} protocolo.status - Current status of the protocol
+ * @param {string} protocolo.categoria - Protocol category
+ */
 function enviarWhatsApp(protocolo) {
-  // Criar mensagem com dados do protocolo
-  const mensagem = `*Protocolo: ${protocolo.numero}*%0A` +
-    `Requerente: ${protocolo.nome_requerente}%0A` +
-    `CPF: ${formatCpf(protocolo.cpf)}%0A` +
-    `Título: ${protocolo.titulo}%0A` +
-    `Status: ${protocolo.status}%0A` +
-    `Categoria: ${protocolo.categoria}`;
+  // Criar mensagem com dados do protocolo (properly encoded)
+  const mensagem = `*Protocolo: ${encodeURIComponent(protocolo.numero)}*%0A` +
+    `Requerente: ${encodeURIComponent(protocolo.nome_requerente)}%0A` +
+    `CPF: ${encodeURIComponent(formatCpf(protocolo.cpf))}%0A` +
+    `Título: ${encodeURIComponent(protocolo.titulo)}%0A` +
+    `Status: ${encodeURIComponent(protocolo.status)}%0A` +
+    `Categoria: ${encodeURIComponent(protocolo.categoria)}`;
   
   // Abrir WhatsApp Web com a mensagem
   const url = `https://wa.me/?text=${mensagem}`;
