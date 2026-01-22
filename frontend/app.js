@@ -851,13 +851,13 @@ function enviarMensagemWhatsApp(protocolo) {
   // Encode message for URL
   const mensagemEncoded = encodeURIComponent(mensagem);
   
-  // Open WhatsApp Web/Desktop with pre-filled message
-  const whatsappUrl = `https://web.whatsapp.com/send?phone=${phoneNumber}&text=${mensagemEncoded}`;
+  // Use whatsapp:// protocol to open desktop app directly on Windows
+  const whatsappUrl = `whatsapp://send?phone=${phoneNumber}&text=${mensagemEncoded}`;
   
-  // Open in new window
-  window.open(whatsappUrl, '_blank');
+  // Try to open WhatsApp desktop app
+  window.location.href = whatsappUrl;
   
-  mostrarMensagem("Abrindo WhatsApp com mensagem pré-preenchida...", "sucesso", 3000);
+  mostrarMensagem("Abrindo WhatsApp Desktop...", "sucesso", 3000);
 }
 
 /* ====================== [BLOCO 7: VALIDAÇÃO GENÉRICA E FEEDBACK] ====================== */
