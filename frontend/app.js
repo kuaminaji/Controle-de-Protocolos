@@ -3017,7 +3017,7 @@ function montarFormularioEditar(p) {
         <button type="button" id="btn-ver-historico">📋 Ver histórico</button>
         <button type="button" id="voltar-menu-editar-form">← Voltar ao Menu</button>
         ${p.status === 'Concluído' && p.whatsapp ? `
-          <button type="button" id="btn-enviar-whatsapp" style="background:#25D366;color:white;margin-left:auto;">
+          <button type="button" id="btn-enviar-whatsapp" style="background:#25D366;color:white;">
             📱 Enviar Mensagem WhatsApp
           </button>
         ` : ''}
