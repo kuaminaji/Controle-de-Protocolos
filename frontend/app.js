@@ -3052,10 +3052,16 @@ function montarFormularioEditar(p) {
   
   // WhatsApp button handler
   document.getElementById("btn-whatsapp-mensagem").onclick = function() {
-    const numero = p.numero || '';
-    const nomeRequerente = p.nome_requerente || '';
-    const titulo = p.titulo || '';
-    const status = p.status || '';
+    // Validate required fields before sending
+    if (!p.numero || !p.nome_requerente) {
+      mostrarMensagem('Protocolo ou nome do requerente não está disponível.', 'erro');
+      return;
+    }
+    
+    const numero = p.numero;
+    const nomeRequerente = p.nome_requerente;
+    const titulo = p.titulo || 'Não informado';
+    const status = p.status || 'Não informado';
     
     // Format the message
     const mensagem = encodeURIComponent(
@@ -3066,8 +3072,8 @@ function montarFormularioEditar(p) {
       `Para mais informações, entre em contato com nosso atendimento.`
     );
     
-    // Open WhatsApp Web or App
-    window.open(`https://wa.me/?text=${mensagem}`, '_blank');
+    // Open WhatsApp Web with the message
+    window.open(`https://web.whatsapp.com/send?text=${mensagem}`, '_blank');
   };
 }
 
