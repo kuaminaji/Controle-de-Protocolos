@@ -680,7 +680,7 @@ def incluir_protocolo(protocolo: ProtocoloModel):
     # Convert names to uppercase
     nome_requerente = protocolo.nome_requerente.strip().upper()
     nome_parte_ato = protocolo.nome_parte_ato.strip().upper()
-    whatsapp = apenas_digitos(protocolo.whatsapp.strip()) if protocolo.whatsapp else ""
+    whatsapp = apenas_digitos(protocolo.whatsapp.strip()) if protocolo.whatsapp and protocolo.whatsapp.strip() else ""
     
     if len(numero) != 5:
         raise HTTPException(status_code=400, detail="Número do protocolo deve conter exatamente 5 dígitos.")

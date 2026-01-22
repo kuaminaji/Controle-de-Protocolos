@@ -778,7 +778,7 @@ function attachCpfMask(elOrId) {
 
 // WhatsApp formatting functions
 function formatWhatsApp(value) {
-  const d = somenteDigitos(value).slice(0, 13); // +55 + 11 digits max
+  const d = somenteDigitos(value).slice(0, 13); // +55 + 11 digits max (total 13)
   if (d.length === 0) return "";
   if (d.length <= 2) return `+${d}`;
   if (d.length <= 4) return `+${d.slice(0,2)}(${d.slice(2)}`;
@@ -795,9 +795,27 @@ function setupWhatsAppInput(inputEl) {
 
 function attachWhatsAppMask(elOrId) {
   const el = typeof elOrId === 'string' ? document.getElementById(elOrId) : elOrId;
-  if (!el) return;
-  el.addEventListener("input", () => el.value = formatWhatsApp(el.value));
+  setupWhatsAppInput(el);
 }
+
+// Reusable uppercase conversion function
+function setupUppercaseInput(inputEl) {
+  if (!inputEl) return;
+  inputEl.addEventListener("input", function() {
+    const start = this.selectionStart;
+    const end = this.selectionEnd;
+    this.value = this.value.toUpperCase();
+    this.setSelectionRange(start, end);
+  });
+}
+
+// WhatsApp message template constant
+const WHATSAPP_MESSAGE_TEMPLATE = (nomeRequerente, numeroProtocolo, nomeParteAto, nomeUsuario) => 
+  `Olá, *${nomeRequerente}.*
+O Protocolo nº *${numeroProtocolo}* em nome de: *${nomeParteAto}* foi finalizado e está pronto para ser retirado.
+Para a retirada, é necessário apresentar o protocolo original. Caso tenha perdido o documento, a retirada poderá ser feita apenas pelo titular da solicitação, mediante apresentação de documento com foto.
+Atenciosamente,
+${nomeUsuario}`;
 
 // Function to send WhatsApp message
 function enviarMensagemWhatsApp(protocolo) {
@@ -821,12 +839,14 @@ function enviarMensagemWhatsApp(protocolo) {
   // Format phone number - remove all non-digits
   const phoneNumber = somenteDigitos(whatsapp);
   
-  // Create message with proper formatting for WhatsApp
-  const mensagem = `Olá, *${nomeRequerente}.*
-O Protocolo nº *${numeroProtocolo}* em nome de: *${nomeParteAto}* foi finalizado e está pronto para ser retirado.
-Para a retirada, é necessário apresentar o protocolo original. Caso tenha perdido o documento, a retirada poderá ser feita apenas pelo titular da solicitação, mediante apresentação de documento com foto.
-Atenciosamente,
-${nomeUsuario}`;
+  // Validate Brazilian mobile number (13 digits: 55 + 2 area code + 9 mobile digits)
+  if (phoneNumber.length < 12 || phoneNumber.length > 13) {
+    mostrarMensagem("Número do WhatsApp inválido. Deve ter 12 ou 13 dígitos (incluindo +55).", "erro");
+    return;
+  }
+  
+  // Create message using template
+  const mensagem = WHATSAPP_MESSAGE_TEMPLATE(nomeRequerente, numeroProtocolo, nomeParteAto, nomeUsuario);
   
   // Encode message for URL
   const mensagemEncoded = encodeURIComponent(mensagem);
@@ -1962,22 +1982,8 @@ function navegar(pagina) {
     setupWhatsAppInput(whatsappInput);
     
     // Auto-uppercase para Nome do Requerente e Nome da Parte no Ato
-    const nomeRequerenteInput = document.getElementById("nome-requerente");
-    const nomeParteAtoInput = document.getElementById("nome-parte-ato");
-    
-    nomeRequerenteInput.addEventListener("input", function() {
-      const start = this.selectionStart;
-      const end = this.selectionEnd;
-      this.value = this.value.toUpperCase();
-      this.setSelectionRange(start, end);
-    });
-    
-    nomeParteAtoInput.addEventListener("input", function() {
-      const start = this.selectionStart;
-      const end = this.selectionEnd;
-      this.value = this.value.toUpperCase();
-      this.setSelectionRange(start, end);
-    });
+    setupUppercaseInput(document.getElementById("nome-requerente"));
+    setupUppercaseInput(document.getElementById("nome-parte-ato"));
     
     // Auto-preenchimento do nome do requerente
     cpfInput.addEventListener("blur", async () => {
@@ -3054,26 +3060,8 @@ function montarFormularioEditar(p) {
   }
   
   // Auto-uppercase para Nome do Requerente e Nome da Parte no Ato
-  const nomeRequerenteInput = document.getElementById("editar-nome-requerente");
-  const nomeParteAtoInput = document.getElementById("editar-nome-parte-ato");
-  
-  if (nomeRequerenteInput) {
-    nomeRequerenteInput.addEventListener("input", function() {
-      const start = this.selectionStart;
-      const end = this.selectionEnd;
-      this.value = this.value.toUpperCase();
-      this.setSelectionRange(start, end);
-    });
-  }
-  
-  if (nomeParteAtoInput) {
-    nomeParteAtoInput.addEventListener("input", function() {
-      const start = this.selectionStart;
-      const end = this.selectionEnd;
-      this.value = this.value.toUpperCase();
-      this.setSelectionRange(start, end);
-    });
-  }
+  setupUppercaseInput(document.getElementById("editar-nome-requerente"));
+  setupUppercaseInput(document.getElementById("editar-nome-parte-ato"));
   
   // WhatsApp button handler
   const btnEnviarWhatsapp = document.getElementById("btn-enviar-whatsapp");
