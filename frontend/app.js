@@ -2873,6 +2873,15 @@ function montarFormularioEditar(p) {
         <strong>📋 Editando Protocolo:</strong> ${esc(p.numero)} | <strong>👤 Requerente:</strong> ${esc(p.nome_requerente)} | <strong>🔢 CPF:</strong> ${esc(formatCpf(p.cpf))}
       </div>
       
+      <div style="margin-bottom:16px;display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
+        <button type="button" id="voltar-menu-editar-form-top">← Voltar ao Menu</button>
+        ${p.status === 'Concluído' && p.whatsapp ? `
+          <button type="button" id="btn-enviar-whatsapp" style="background:#25D366;color:white;">
+            📱 Enviar Mensagem WhatsApp
+          </button>
+        ` : ''}
+      </div>
+      
       <div style="display:flex;gap:12px;flex-wrap:wrap;">
         <div style="flex:1;min-width:200px;">
           <label>Número do Protocolo *</label>
@@ -3015,12 +3024,7 @@ function montarFormularioEditar(p) {
       <div style="margin-top:20px;display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
         <button type="submit" id="btn-salvar-editar">💾 Salvar Alterações</button>
         <button type="button" id="btn-ver-historico">📋 Ver histórico</button>
-        <button type="button" id="voltar-menu-editar-form">← Voltar ao Menu</button>
-        ${p.status === 'Concluído' && p.whatsapp ? `
-          <button type="button" id="btn-enviar-whatsapp" style="background:#25D366;color:white;">
-            📱 Enviar Mensagem WhatsApp
-          </button>
-        ` : ''}
+        <button type="button" id="voltar-menu-editar-form-bottom">← Voltar ao Menu</button>
       </div>
     </form>
     <div id="historico-lista" style="margin-top:20px;"></div>
@@ -3174,7 +3178,12 @@ function montarFormularioEditar(p) {
   };
   
   document.getElementById("btn-ver-historico").onclick = () => verHistorico(p.id);
-  document.getElementById("voltar-menu-editar-form").onclick = menuInicial;
+  
+  // Handle both top and bottom "Voltar ao Menu" buttons
+  const voltarTopBtn = document.getElementById("voltar-menu-editar-form-top");
+  const voltarBottomBtn = document.getElementById("voltar-menu-editar-form-bottom");
+  if (voltarTopBtn) voltarTopBtn.onclick = menuInicial;
+  if (voltarBottomBtn) voltarBottomBtn.onclick = menuInicial;
 }
 
 // ====================== [BLOCO 21: HISTÓRICO DETALHADO] ====================== //
