@@ -1744,64 +1744,68 @@ function navegar(pagina) {
         <h2>Incluir Protocolo</h2>
         <form id="form-protocolo" autocomplete="off" style="max-width:1000px;">
           <div style="display:flex;gap:12px;flex-wrap:wrap;">
-            <div style="flex:1;min-width:200px;">
+            <div style="flex:1;min-width:180px;">
               <label>Número do Protocolo *</label>
               <input type="text" id="numero-protocolo" name="numero" maxlength="5" minlength="5" required 
                      inputmode="numeric" pattern="^\\d{5}$" style="width:100%;" 
                      placeholder="00000">
               <div id="protocolo-feedback" class="campo-feedback hint"></div>
             </div>
-            <div style="width:220px;">
+            <div style="width:180px;">
               <label>Data de Criação *</label>
               <input type="date" id="data-criacao" name="data_criacao" value="${hoje}" required style="width:100%;">
             </div>
-            <div style="width:240px;">
+            <div style="flex:1;min-width:200px;">
               <label>Responsável Pelo Pt. *</label>
               <input type="text" id="responsavel" name="responsavel" value="${esc(sessao.usuario)}" readonly style="width:100%;">
             </div>
           </div>
           
           <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap;">
-            <div style="width:220px;">
+            <div style="flex:1;min-width:220px;">
+              <label>Nome do Requerente *</label>
+              <input type="text" id="nome-requerente" name="nome_requerente" maxlength="60" required style="width:100%;">
+            </div>
+            <div style="width:180px;">
               <label>CPF *</label>
               <input type="text" id="cpf-incluir" name="cpf" maxlength="14" required 
                      inputmode="numeric" placeholder="000.000.000-00" style="width:100%;">
               <div id="cpf-incluir-feedback" class="campo-feedback hint">Informe 11 dígitos</div>
             </div>
-            <div style="flex:1;min-width:250px;">
-              <label>Nome do Requerente *</label>
-              <input type="text" id="nome-requerente" name="nome_requerente" maxlength="60" required style="width:100%;">
+            <div style="width:180px;">
+              <label>WhatsApp</label>
+              <input type="text" id="whatsapp-incluir" name="whatsapp" maxlength="15" 
+                     inputmode="numeric" placeholder="(00) 00000-0000" style="width:100%;">
             </div>
-            <div style="width:300px;">
-              <label>Título/Assunto *</label>
-              <input type="text" id="titulo" name="titulo" maxlength="120" required style="width:100%;">
-            </div>
-          </div>
-          
-          <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap;">
-            <div style="flex:1;min-width:250px;">
-              <label>Nome da parte no ato</label>
-              <input type="text" id="nome-parte-ato" name="nome_parte_ato" maxlength="120" style="width:100%;">
-            </div>
-            <div style="width:220px;">
-              <label>Status *</label>
-              <select id="status" name="status" required style="width:100%;">
-                <option value="">Selecione</option>
-                ${STATUS_OPTIONS.map(s => `<option>${esc(s)}</option>`).join('')}
-              </select>
-            </div>
-            <div style="width:220px;">
+            <div style="width:180px;">
               <label>Categoria *</label>
               <select id="categoria" name="categoria" required style="width:100%;">
                 <option value="">Selecione</option>
                 ${CATEGORIA_OPTIONS.map(c => `<option>${esc(c)}</option>`).join('')}
               </select>
             </div>
+            <div style="width:180px;">
+              <label>Status *</label>
+              <select id="status" name="status" required style="width:100%;">
+                <option value="">Selecione</option>
+                ${STATUS_OPTIONS.map(s => `<option>${esc(s)}</option>`).join('')}
+              </select>
+            </div>
           </div>
           
-          <div style="margin-top:8px;">
-            <label>Outras Informações / Cartorio do Ato Original</label>
-            <input type="text" name="outras_infos" maxlength="120" style="width:100%;">
+          <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap;">
+            <div style="flex:1;min-width:200px;">
+              <label>Nome da parte no ato</label>
+              <input type="text" id="nome-parte-ato" name="nome_parte_ato" maxlength="120" style="width:100%;">
+            </div>
+            <div style="flex:1;min-width:250px;">
+              <label>Título/Assunto *</label>
+              <input type="text" id="titulo" name="titulo" maxlength="120" required style="width:100%;">
+            </div>
+            <div style="flex:1;min-width:250px;">
+              <label>Outras Informações / Cartorio do Ato Original</label>
+              <input type="text" name="outras_infos" maxlength="120" style="width:100%;">
+            </div>
           </div>
           
           <div style="margin-top:8px;">
@@ -2175,6 +2179,7 @@ function navegar(pagina) {
             <div style="margin-left:auto;align-self:flex-end;">
               <button type="submit">🔍 Carregar</button>
               <button type="button" id="voltar-menu-editar">← Voltar ao Menu</button>
+              <button type="button" id="btn-whatsapp-mensagem" style="display:none;">💬 Enviar Mensagem WhatsApp</button>
             </div>
           </div>
           <div style="margin-top:8px;color:#666;font-size:0.9em;">
@@ -2751,6 +2756,44 @@ function montarFormularioEditar(p) {
   let sessao = getSessao();
   const isAdmin = (sessao && sessao.tipo === 'admin');
   
+  // Show WhatsApp button in the top section
+  const whatsappBtn = document.getElementById('btn-whatsapp-mensagem');
+  if (whatsappBtn) {
+    whatsappBtn.style.display = 'inline-block';
+    
+    // Set up WhatsApp button handler
+    whatsappBtn.onclick = function() {
+      // Validate required fields before sending
+      if (!p.numero || !p.nome_requerente) {
+        mostrarMensagem('Protocolo ou nome do requerente não está disponível.', 'erro');
+        return;
+      }
+      
+      const numero = p.numero;
+      const nomeRequerente = p.nome_requerente;
+      const titulo = p.titulo || 'Não informado';
+      const status = p.status || 'Não informado';
+      const whatsappNumber = p.whatsapp || '';
+      
+      // Format the message
+      const mensagem = encodeURIComponent(
+        `📋 *Protocolo ${numero}*\n\n` +
+        `👤 Requerente: ${nomeRequerente}\n` +
+        `📄 Assunto: ${titulo}\n` +
+        `📊 Status: ${status}\n\n` +
+        `Para mais informações, entre em contato com nosso atendimento.`
+      );
+      
+      // Open WhatsApp Web with the message
+      // If phone number is provided, send directly to that number
+      const whatsappUrl = whatsappNumber 
+        ? `https://web.whatsapp.com/send?phone=${encodeURIComponent(whatsappNumber.replace(/\D/g, ''))}&text=${mensagem}`
+        : `https://web.whatsapp.com/send?text=${mensagem}`;
+      
+      window.open(whatsappUrl, '_blank');
+    };
+  }
+  
   // Verificar se há exigências preenchidas
   const hasExigData = (i) => {
     const rp = (p[`exig${i}_retirada_por`] || "").trim();
@@ -2769,64 +2812,65 @@ function montarFormularioEditar(p) {
       </div>
       
       <div style="display:flex;gap:12px;flex-wrap:wrap;">
-        <div style="flex:1;min-width:200px;">
+        <div style="flex:1;min-width:180px;">
           <label>Número do Protocolo *</label>
           <input type="text" id="editar-numero-protocolo" name="numero" value="${esc(p.numero)}" 
                  maxlength="5" minlength="5" pattern="^\\d{5}$" required 
                  ${isAdmin ? '' : 'readonly'} style="width:100%;">
           <div id="editar-numero-protocolo-feedback" class="campo-feedback"></div>
         </div>
-        <div style="width:200px;">
+        <div style="width:180px;">
           <label>Data de Criação *</label>
           <input type="date" id="editar-data-criacao" name="data_criacao" value="${esc(p.data_criacao)}" required style="width:100%;">
         </div>
-        <div style="width:220px;">
+        <div style="flex:1;min-width:200px;">
           <label>Responsável Pelo Pt. *</label>
           <input type="text" id="editar-responsavel" name="responsavel" value="${esc(p.responsavel)}" readonly style="width:100%;">
         </div>
       </div>
       
       <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap;">
-        <div style="flex:1;min-width:250px;">
+        <div style="flex:1;min-width:220px;">
           <label>Nome do Requerente *</label>
           <input type="text" id="editar-nome-requerente" name="nome_requerente" value="${esc(p.nome_requerente)}" maxlength="60" required style="width:100%;">
         </div>
-        <div style="width:200px;">
+        <div style="width:180px;">
           <label>CPF *</label>
           <input type="text" id="cpf-editar" name="cpf" value="${esc(formatCpf(p.cpf))}" maxlength="14" required style="width:100%;">
           <div id="cpf-editar-feedback" class="campo-feedback hint">Informe 11 dígitos</div>
         </div>
-      </div>
-      
-      <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap;">
-        <div style="width:220px;">
-          <label>Status *</label>
-          <select id="editar-status" name="status" required style="width:100%;">
-            ${STATUS_OPTIONS.map(s => `<option${p.status === s ? ' selected' : ''}>${esc(s)}</option>`).join('')}
-          </select>
+        <div style="width:180px;">
+          <label>WhatsApp</label>
+          <input type="text" id="whatsapp-editar" name="whatsapp" value="${esc(p.whatsapp || '')}" maxlength="15" 
+                 inputmode="numeric" placeholder="(00) 00000-0000" style="width:100%;">
         </div>
-        <div style="width:220px;">
+        <div style="width:180px;">
           <label>Categoria *</label>
           <select id="editar-categoria" name="categoria" required style="width:100%;">
             ${CATEGORIA_OPTIONS.map(c => `<option${p.categoria === c ? ' selected' : ''}>${esc(c)}</option>`).join('')}
           </select>
         </div>
+        <div style="width:180px;">
+          <label>Status *</label>
+          <select id="editar-status" name="status" required style="width:100%;">
+            ${STATUS_OPTIONS.map(s => `<option${p.status === s ? ' selected' : ''}>${esc(s)}</option>`).join('')}
+          </select>
+        </div>
       </div>
       
       <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap;">
-        <div style="flex:1;min-width:250px;">
+        <div style="flex:1;min-width:200px;">
           <label>Nome da parte no ato</label>
           <input type="text" id="editar-nome-parte-ato" name="nome_parte_ato" value="${esc(p.nome_parte_ato || '')}" maxlength="120" style="width:100%;">
         </div>
-        <div style="flex:2;min-width:300px;">
+        <div style="flex:1;min-width:250px;">
           <label>Título/Assunto *</label>
           <input type="text" id="editar-titulo" name="titulo" value="${esc(p.titulo)}" maxlength="120" required style="width:100%;">
         </div>
-      </div>
-      
-      <div style="margin-top:8px;">
-        <label>Outras Informações / Cartorio do Ato Original</label>
-        <input type="text" id="editar-outras-infos" name="outras_infos" value="${esc(p.outras_infos || '')}" maxlength="120" style="width:100%;">
+        <div style="flex:1;min-width:250px;">
+          <label>Outras Informações / Cartorio do Ato Original</label>
+          <input type="text" id="editar-outras-infos" name="outras_infos" value="${esc(p.outras_infos || '')}" maxlength="120" style="width:100%;">
+        </div>
       </div>
       
       <div style="margin-top:8px;">
@@ -2907,12 +2951,9 @@ function montarFormularioEditar(p) {
       </div>
       
       <div style="margin-top:20px;display:flex;gap:12px;flex-wrap:wrap;">
-        <button type="button" id="btn-whatsapp-mensagem">💬 Enviar Mensagem WhatsApp</button>
-        <button type="button" id="voltar-menu-editar-form">← Voltar ao Menu</button>
-      </div>
-      
-      <div style="margin-top:12px;display:flex;gap:12px;flex-wrap:wrap;">
         <button type="submit" id="btn-salvar-editar">💾 Salvar Alterações</button>
+        <button type="button" id="voltar-menu-editar-form">← Voltar ao Menu</button>
+        <button type="button" onclick="this.form.reset();">🔄 Limpar</button>
         <button type="button" id="btn-ver-historico">📋 Ver histórico</button>
       </div>
     </form>
@@ -3049,32 +3090,6 @@ function montarFormularioEditar(p) {
   
   document.getElementById("btn-ver-historico").onclick = () => verHistorico(p.id);
   document.getElementById("voltar-menu-editar-form").onclick = menuInicial;
-  
-  // WhatsApp button handler
-  document.getElementById("btn-whatsapp-mensagem").onclick = function() {
-    // Validate required fields before sending
-    if (!p.numero || !p.nome_requerente) {
-      mostrarMensagem('Protocolo ou nome do requerente não está disponível.', 'erro');
-      return;
-    }
-    
-    const numero = p.numero;
-    const nomeRequerente = p.nome_requerente;
-    const titulo = p.titulo || 'Não informado';
-    const status = p.status || 'Não informado';
-    
-    // Format the message
-    const mensagem = encodeURIComponent(
-      `📋 *Protocolo ${numero}*\n\n` +
-      `👤 Requerente: ${nomeRequerente}\n` +
-      `📄 Assunto: ${titulo}\n` +
-      `📊 Status: ${status}\n\n` +
-      `Para mais informações, entre em contato com nosso atendimento.`
-    );
-    
-    // Open WhatsApp Web with the message
-    window.open(`https://web.whatsapp.com/send?text=${mensagem}`, '_blank');
-  };
 }
 
 // ====================== [BLOCO 21: HISTÓRICO DETALHADO] ====================== //
