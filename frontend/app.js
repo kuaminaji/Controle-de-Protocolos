@@ -1751,46 +1751,46 @@ function navegar(pagina) {
                      placeholder="00000">
               <div id="protocolo-feedback" class="campo-feedback hint"></div>
             </div>
-            <div style="width:220px;">
+            <div style="flex:1;min-width:200px;">
               <label>Data de Criação *</label>
               <input type="date" id="data-criacao" name="data_criacao" value="${hoje}" required style="width:100%;">
             </div>
-            <div style="width:240px;">
+            <div style="flex:1;min-width:220px;">
               <label>Responsável Pelo Pt. *</label>
               <input type="text" id="responsavel" name="responsavel" value="${esc(sessao.usuario)}" readonly style="width:100%;">
             </div>
           </div>
           
           <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap;">
-            <div style="width:220px;">
+            <div style="flex:1;min-width:200px;">
               <label>CPF *</label>
               <input type="text" id="cpf-incluir" name="cpf" maxlength="14" required 
                      inputmode="numeric" placeholder="000.000.000-00" style="width:100%;">
               <div id="cpf-incluir-feedback" class="campo-feedback hint">Informe 11 dígitos</div>
             </div>
-            <div style="flex:1;min-width:250px;">
+            <div style="flex:2;min-width:250px;">
               <label>Nome do Requerente *</label>
               <input type="text" id="nome-requerente" name="nome_requerente" maxlength="60" required style="width:100%;">
             </div>
-            <div style="width:300px;">
+            <div style="flex:2;min-width:250px;">
               <label>Título/Assunto *</label>
               <input type="text" id="titulo" name="titulo" maxlength="120" required style="width:100%;">
             </div>
           </div>
           
           <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap;">
-            <div style="flex:1;min-width:250px;">
+            <div style="flex:2;min-width:250px;">
               <label>Nome da parte no ato</label>
               <input type="text" id="nome-parte-ato" name="nome_parte_ato" maxlength="120" style="width:100%;">
             </div>
-            <div style="width:220px;">
+            <div style="flex:1;min-width:200px;">
               <label>Status *</label>
               <select id="status" name="status" required style="width:100%;">
                 <option value="">Selecione</option>
                 ${STATUS_OPTIONS.map(s => `<option>${esc(s)}</option>`).join('')}
               </select>
             </div>
-            <div style="width:220px;">
+            <div style="flex:1;min-width:200px;">
               <label>Categoria *</label>
               <select id="categoria" name="categoria" required style="width:100%;">
                 <option value="">Selecione</option>
@@ -1978,17 +1978,17 @@ function navegar(pagina) {
         
         <form id="form-busca" autocomplete="off" style="max-width:1100px;">
           <div style="display:flex;gap:12px;margin-bottom:8px;flex-wrap:wrap;">
-            <div style="flex:1;min-width:250px;">
+            <div style="flex:2;min-width:250px;">
               <label>Busca global</label>
               <input type="text" id="buscar-palavra" maxlength="50" 
-                     placeholder="Qualquer termo, número, nome, título..." style="width:100;">
+                     placeholder="Qualquer termo, número, nome, título..." style="width:100%;">
             </div>
-            <div style="width:220px;">
+            <div style="flex:1;min-width:200px;">
               <label>Número do Protocolo</label>
               <input type="text" id="buscar-numero" maxlength="10" autocomplete="off" 
                      inputmode="numeric" pattern="^[0-9]{1,10}$" placeholder="Ex: 12345" style="width:100%;">
             </div>
-            <div style="width:200px;">
+            <div style="flex:1;min-width:180px;">
               <label>CPF do Requerente</label>
               <input type="text" id="buscar-cpf" maxlength="14" autocomplete="off" 
                      inputmode="numeric" placeholder="000.000.000-00" style="width:100%;">
@@ -1996,7 +1996,7 @@ function navegar(pagina) {
           </div>
           
           <div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:8px;flex-wrap:wrap;">
-            <div style="min-width:220px;position:relative;">
+            <div style="flex:1;min-width:200px;position:relative;">
               <label>Status</label>
               <div class="multi-container" style="position:relative;">
                 <button type="button" id="toggle-status" class="toggle-btn" style="width:100%;text-align:left;padding:8px;border:1px solid #ccc;background:#fff;border-radius:4px;">
@@ -2008,7 +2008,7 @@ function navegar(pagina) {
               </div>
             </div>
             
-            <div style="min-width:220px;position:relative;">
+            <div style="flex:1;min-width:200px;position:relative;">
               <label>Categoria</label>
               <div class="multi-container" style="position:relative;">
                 <button type="button" id="toggle-categoria" class="toggle-btn" style="width:100%;text-align:left;padding:8px;border:1px solid #ccc;background:#fff;border-radius:4px;">
@@ -2020,7 +2020,7 @@ function navegar(pagina) {
               </div>
             </div>
             
-            <div style="width:180px;">
+            <div style="flex:1;min-width:160px;">
               <label>Período Relativo</label>
               <select id="periodo-relativo" style="width:100%;">
                 <option value="">Qualquer período</option>
@@ -2031,18 +2031,18 @@ function navegar(pagina) {
               </select>
             </div>
             
-            <div style="width:180px;">
+            <div style="flex:1;min-width:160px;">
               <label>Data de criação (de)</label>
               <input type="date" id="buscar-data-inicio" style="width:100%;">
             </div>
-            <div style="width:180px;">
+            <div style="flex:1;min-width:160px;">
               <label>Data de criação (até)</label>
               <input type="date" id="buscar-data-fim" style="width:100%;">
             </div>
           </div>
           
-          <div style="display:flex;gap:12px;align-items:center;margin-bottom:8px;flex-wrap:wrap;">
-            <div style="width:220px;">
+          <div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:8px;flex-wrap:wrap;">
+            <div style="flex:1;min-width:200px;">
               <label>Ordenar por</label>
               <select id="sort-by" style="width:100%;">
                 <option value="data_criacao">Data de criação</option>
@@ -2055,14 +2055,14 @@ function navegar(pagina) {
                 <option value="data_retirada">Data de retirada</option>
               </select>
             </div>
-            <div style="width:120px;">
+            <div style="flex:1;min-width:100px;">
               <label>Direção</label>
               <select id="sort-dir" style="width:100%;">
                 <option value="desc">Desc</option>
                 <option value="asc">Asc</option>
               </select>
             </div>
-            <div style="width:120px;">
+            <div style="flex:1;min-width:100px;">
               <label>Por página</label>
               <select id="per-page" style="width:100%;">
                 <option>10</option>
@@ -2074,7 +2074,7 @@ function navegar(pagina) {
           </div>
 
           <!-- Botões centralizados -->
-          <div style="display:flex; justify-content: center; gap: 8px; margin-top: 18px; flex-wrap: wrap;">
+          <div style="display:flex; justify-content: center; gap: 12px; margin-top: 18px; flex-wrap: wrap; align-items: center;">
             <button type="submit" id="btn-buscar">🔍 Buscar</button>
             <button type="button" id="mostrar-todos">📋 Mostrar Todos</button>
             <button type="button" id="limpar-filtros">🗑️ Limpar Filtros</button>
@@ -2168,14 +2168,14 @@ function navegar(pagina) {
               <label>Número do Protocolo</label>
               <input type="text" id="editar-numero" maxlength="10" inputmode="numeric" pattern="^[0-9]{1,10}$" style="width:100%;">
             </div>
-            <div style="width:260px;">
+            <div style="flex:1;min-width:240px;">
               <label>CPF do Requerente</label>
               <input type="text" id="editar-cpf" maxlength="14" inputmode="numeric" placeholder="000.000.000-00" style="width:100%;">
             </div>
-            <div style="margin-left:auto;align-self:flex-end;">
-              <button type="submit">🔍 Carregar</button>
-              <button type="button" id="voltar-menu-editar">← Voltar ao Menu</button>
-            </div>
+          </div>
+          <div style="display:flex;gap:12px;margin-top:12px;justify-content:center;flex-wrap:wrap;">
+            <button type="submit">🔍 Carregar</button>
+            <button type="button" id="voltar-menu-editar">← Voltar ao Menu</button>
           </div>
           <div style="margin-top:8px;color:#666;font-size:0.9em;">
             ⓘ Informe o número do protocolo OU o CPF para buscar
@@ -2201,20 +2201,18 @@ function navegar(pagina) {
         <h2>Excluir Protocolo</h2>
         <form id="form-excluir-busca" autocomplete="off" style="max-width:600px;">
           <div style="display:flex;gap:12px;flex-wrap:wrap;">
-            <div style="width:260px;">
+            <div style="flex:1;min-width:240px;">
               <label>Número do Protocolo</label>
               <input type="text" id="excluir-numero" maxlength="10" inputmode="numeric" style="width:100%;">
             </div>
-            <div style="width:260px;">
+            <div style="flex:1;min-width:240px;">
               <label>CPF do Requerente</label>
               <input type="text" id="excluir-cpf" maxlength="14" inputmode="numeric" placeholder="000.000.000-00" style="width:100%;">
             </div>
-            <div style="margin-left:auto;align-self:flex-end;">
-              <button type="submit">🔍 Carregar</button>
-            </div>
-            <div style="align-self:flex-end;">
-              <button type="button" id="voltar-menu-excluir">← Voltar ao Menu</button>
-            </div>
+          </div>
+          <div style="display:flex;gap:12px;margin-top:12px;justify-content:center;flex-wrap:wrap;">
+            <button type="submit">🔍 Carregar</button>
+            <button type="button" id="voltar-menu-excluir">← Voltar ao Menu</button>
           </div>
         </form>
         <div id="form-excluir" style="margin-top:12px;"></div>
@@ -2542,12 +2540,12 @@ async function buscarProtocolo(pageOverride) {
         html += `
           <div class="protocolo-card" style="border:1px solid #e0e0e0;border-radius:8px;margin-bottom:16px;background:white;overflow:hidden;">
             <div style="background:#f8f9fa;padding:12px;border-bottom:1px solid #e0e0e0;">
-              <div style="display:flex;justify-content:between;align-items:center;flex-wrap:wrap;gap:8px;">
+              <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
                 <div style="display:flex;align-items:center;gap:8px;">
                   <strong style="font-size:1.1em;">Protocolo: ${esc(p.numero)}</strong>
                   ${renderStatusBadge(p.status)}
                 </div>
-                <div style="margin-left:auto;display:flex;gap:8px;">
+                <div style="display:flex;gap:8px;">
                   <button type="button" class="result-action-btn" onclick="verHistoricoBusca('${p.id}', this)">📋 Histórico</button>
                   <button type="button" class="result-action-btn" onclick="try{hidePreview();}catch(e){}; editarFromBusca('${esc(p.numero)}')">✏️ Editar</button>
                 </div>
