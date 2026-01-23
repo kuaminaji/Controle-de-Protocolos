@@ -1762,20 +1762,20 @@ function navegar(pagina) {
           </div>
           
           <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap;">
-            <div style="flex:1;min-width:220px;">
-              <label>Nome do Requerente *</label>
-              <input type="text" id="nome-requerente" name="nome_requerente" maxlength="60" required style="width:100%;">
-            </div>
             <div style="width:180px;">
               <label>CPF *</label>
               <input type="text" id="cpf-incluir" name="cpf" maxlength="14" required 
                      inputmode="numeric" placeholder="000.000.000-00" style="width:100%;">
               <div id="cpf-incluir-feedback" class="campo-feedback hint">Informe 11 dígitos</div>
             </div>
-            <div style="width:180px;">
+            <div style="flex:1;min-width:220px;">
+              <label>Nome do Requerente *</label>
+              <input type="text" id="nome-requerente" name="nome_requerente" maxlength="60" required style="width:100%;">
+            </div>
+            <div style="width:200px;">
               <label>WhatsApp</label>
-              <input type="text" id="whatsapp-incluir" name="whatsapp" maxlength="20" value="+5524" 
-                     inputmode="tel" placeholder="+5524" style="width:100%;">
+              <input type="text" id="whatsapp-incluir" name="whatsapp" maxlength="20" value="+55(24)" 
+                     inputmode="tel" placeholder="+55(24)00000-0000" style="width:100%;">
             </div>
             <div style="width:180px;">
               <label>Categoria *</label>
@@ -1892,18 +1892,32 @@ function navegar(pagina) {
     const cpfFeedback = document.getElementById("cpf-incluir-feedback");
     setupCpfInput(cpfInput, cpfFeedback, btnSalvarIncluir);
     
-    // Auto-preenchimento do nome do requerente
+    // Auto-preenchimento do nome do requerente e WhatsApp
     cpfInput.addEventListener("blur", async () => {
       const cpf = somenteDigitos(cpfInput.value);
       const nomeInput = document.getElementById("nome-requerente");
-      if (cpf.length === 11 && isCpfValido(cpf) && !nomeInput.value.trim()) {
+      const whatsappInput = document.getElementById("whatsapp-incluir");
+      
+      if (cpf.length === 11 && isCpfValido(cpf)) {
         try {
           const resp = await fetchWithAuth("/api/protocolo/nome_requerente_por_cpf?cpf=" + cpf);
           if (resp.ok) {
             const data = await resp.json();
-            if (data.nome_requerente) {
+            
+            // Auto-preencher nome se não estiver preenchido
+            if (data.nome_requerente && !nomeInput.value.trim()) {
               nomeInput.value = data.nome_requerente;
               mostrarMensagem("Nome do requerente preenchido automaticamente", "sucesso", 3000);
+            }
+            
+            // Auto-preencher WhatsApp se disponível e campo não foi alterado
+            if (data.whatsapp && (whatsappInput.value === "+55(24)" || !whatsappInput.value.trim())) {
+              whatsappInput.value = data.whatsapp;
+              if (data.nome_requerente) {
+                mostrarMensagem("Nome e WhatsApp preenchidos automaticamente", "sucesso", 3000);
+              } else {
+                mostrarMensagem("WhatsApp preenchido automaticamente", "sucesso", 3000);
+              }
             }
           }
         } catch {}
@@ -2840,10 +2854,10 @@ function montarFormularioEditar(p) {
           <input type="text" id="cpf-editar" name="cpf" value="${esc(formatCpf(p.cpf))}" maxlength="14" required style="width:100%;">
           <div id="cpf-editar-feedback" class="campo-feedback hint">Informe 11 dígitos</div>
         </div>
-        <div style="width:180px;">
+        <div style="width:200px;">
           <label>WhatsApp</label>
-          <input type="text" id="whatsapp-editar" name="whatsapp" value="${esc(p.whatsapp || '+5524')}" maxlength="20" 
-                 inputmode="tel" placeholder="+5524" style="width:100%;">
+          <input type="text" id="whatsapp-editar" name="whatsapp" value="${esc(p.whatsapp || '+55(24)')}" maxlength="20" 
+                 inputmode="tel" placeholder="+55(24)00000-0000" style="width:100%;">
         </div>
         <div style="width:180px;">
           <label>Categoria *</label>

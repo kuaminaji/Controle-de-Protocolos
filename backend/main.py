@@ -718,6 +718,21 @@ def incluir_protocolo(protocolo: ProtocoloModel):
         res = protocolos_coll.insert_one(novo)
         protocolo_id = str(res.inserted_id)
         logger.info(f"Protocolo {numero} criado")
+        
+        # Update nome_requerente and whatsapp in all other protocols with the same CPF
+        update_data = {}
+        if novo.get("nome_requerente"):
+            update_data["nome_requerente"] = novo["nome_requerente"]
+        if novo.get("whatsapp"):
+            update_data["whatsapp"] = novo["whatsapp"]
+        
+        if update_data:
+            protocolos_coll.update_many(
+                {"cpf": cpf, "numero": {"$ne": numero}},
+                {"$set": update_data}
+            )
+            logger.info(f"Dados do requerente atualizados para CPF {cpf}")
+        
         return {"id": protocolo_id}
     except errors.DuplicateKeyError:
         raise HTTPException(status_code=400, detail="Já consta um protocolo com a numeração informada.")
@@ -1073,6 +1088,23 @@ def editar_protocolo(id: str, protocolo: dict):
     res = protocolos_coll.update_one({"_id": oid}, update_doc)
     if res.matched_count == 1:
         logger.info(f"Protocolo {prot.get('numero', '')} editado")
+        
+        # Update nome_requerente and whatsapp in all other protocols with the same CPF
+        cpf_atualizado = atualizacao.get("cpf") or prot.get("cpf")
+        if cpf_atualizado:
+            update_data = {}
+            if "nome_requerente" in atualizacao and atualizacao.get("nome_requerente"):
+                update_data["nome_requerente"] = atualizacao["nome_requerente"]
+            if "whatsapp" in atualizacao and atualizacao.get("whatsapp"):
+                update_data["whatsapp"] = atualizacao["whatsapp"]
+            
+            if update_data:
+                protocolos_coll.update_many(
+                    {"cpf": cpf_atualizado, "_id": {"$ne": oid}},
+                    {"$set": update_data}
+                )
+                logger.info(f"Dados do requerente atualizados para CPF {cpf_atualizado}")
+        
         return {"ok": True}
     raise HTTPException(status_code=404, detail="Protocolo não encontrado ou não alterado.")
 
@@ -1190,8 +1222,11 @@ def nome_requerente_por_cpf(cpf: str):
     cpf_puro = apenas_digitos(cpf)
     p = protocolos_coll.find_one({"cpf": cpf_puro}, sort=[("data_criacao_dt", DESCENDING)])
     if p:
-        return {"nome_requerente": p.get("nome_requerente", "")}
-    return {"nome_requerente": ""}
+        return {
+            "nome_requerente": p.get("nome_requerente", ""),
+            "whatsapp": p.get("whatsapp", "")
+        }
+    return {"nome_requerente": "", "whatsapp": ""}
 
 @app.get("/api/protocolo/exigencias-pendentes")
 def protocolos_exigencias_pendentes_get(
