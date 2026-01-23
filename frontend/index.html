@@ -28,15 +28,17 @@
 
 		
       <div class="topbar-actions" role="navigation" aria-label="Ações principais">
-	  <div class="brand-name">Notificações:</div>
+	  <div style="display:flex;align-items:center;gap:4px;">
+	    <span class="brand-name" style="font-size:0.9rem;font-weight:600;">Notificações:</span>
         <button id="btn-notificacoes" class="icon-btn" aria-label="Notificações" title="Notificações">
           🔔 <span id="badge-notificacoes" class="badge" style="display:none">0</span>
         </button>
+	  </div>
 		
 		<div class="user-container">
 		<button id="btn-user" class="user-btn" aria-label="Usuário atual" title="Menu do usuário">
 		<span class="user-icon" aria-hidden="true">
-		<img src="/static/static/logotipo3.png" alt="Logo" class="menu-logo" />
+		<img src="/static/static/logotipo3.png" alt="Logo" class="menu-logo" style="width:24px;height:24px;object-fit:contain;border-radius:4px;" />
 		</span>
 		<span id="usuario-logado-short"></span>
 		</button>
