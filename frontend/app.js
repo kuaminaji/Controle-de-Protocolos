@@ -1761,30 +1761,30 @@ function navegar(pagina) {
             </div>
           </div>
           
-          <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap;">
-            <div style="width:180px;">
+          <div style="display:flex;gap:10px;margin-top:8px;flex-wrap:wrap;">
+            <div style="width:140px;">
               <label>CPF *</label>
               <input type="text" id="cpf-incluir" name="cpf" maxlength="14" required 
                      inputmode="numeric" placeholder="000.000.000-00" style="width:100%;">
               <div id="cpf-incluir-feedback" class="campo-feedback hint">Informe 11 dígitos</div>
             </div>
-            <div style="flex:1;min-width:220px;">
+            <div style="flex:1;min-width:200px;">
               <label>Nome do Requerente *</label>
               <input type="text" id="nome-requerente" name="nome_requerente" maxlength="60" required style="width:100%;">
             </div>
-            <div style="width:200px;">
+            <div style="width:170px;">
               <label>WhatsApp</label>
               <input type="text" id="whatsapp-incluir" name="whatsapp" maxlength="20" value="+55(24)" 
                      inputmode="tel" placeholder="+55(24)00000-0000" style="width:100%;">
             </div>
-            <div style="width:180px;">
+            <div style="width:150px;">
               <label>Categoria *</label>
               <select id="categoria" name="categoria" required style="width:100%;">
                 <option value="">Selecione</option>
                 ${CATEGORIA_OPTIONS.map(c => `<option>${esc(c)}</option>`).join('')}
               </select>
             </div>
-            <div style="width:180px;">
+            <div style="width:150px;">
               <label>Status *</label>
               <select id="status" name="status" required style="width:100%;">
                 <option value="">Selecione</option>
@@ -2844,28 +2844,28 @@ function montarFormularioEditar(p) {
         </div>
       </div>
       
-      <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap;">
-        <div style="flex:1;min-width:220px;">
-          <label>Nome do Requerente *</label>
-          <input type="text" id="editar-nome-requerente" name="nome_requerente" value="${esc(p.nome_requerente)}" maxlength="60" required style="width:100%;">
-        </div>
-        <div style="width:180px;">
+      <div style="display:flex;gap:10px;margin-top:8px;flex-wrap:wrap;">
+        <div style="width:140px;">
           <label>CPF *</label>
           <input type="text" id="cpf-editar" name="cpf" value="${esc(formatCpf(p.cpf))}" maxlength="14" required style="width:100%;">
           <div id="cpf-editar-feedback" class="campo-feedback hint">Informe 11 dígitos</div>
         </div>
-        <div style="width:200px;">
+        <div style="flex:1;min-width:200px;">
+          <label>Nome do Requerente *</label>
+          <input type="text" id="editar-nome-requerente" name="nome_requerente" value="${esc(p.nome_requerente)}" maxlength="60" required style="width:100%;">
+        </div>
+        <div style="width:170px;">
           <label>WhatsApp</label>
           <input type="text" id="whatsapp-editar" name="whatsapp" value="${esc(p.whatsapp || '+55(24)')}" maxlength="20" 
                  inputmode="tel" placeholder="+55(24)00000-0000" style="width:100%;">
         </div>
-        <div style="width:180px;">
+        <div style="width:150px;">
           <label>Categoria *</label>
           <select id="editar-categoria" name="categoria" required style="width:100%;">
             ${CATEGORIA_OPTIONS.map(c => `<option${p.categoria === c ? ' selected' : ''}>${esc(c)}</option>`).join('')}
           </select>
         </div>
-        <div style="width:180px;">
+        <div style="width:150px;">
           <label>Status *</label>
           <select id="editar-status" name="status" required style="width:100%;">
             ${STATUS_OPTIONS.map(s => `<option${p.status === s ? ' selected' : ''}>${esc(s)}</option>`).join('')}
