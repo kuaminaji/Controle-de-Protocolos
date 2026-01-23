@@ -55,6 +55,11 @@ tmp/
 temp/
 *.tmp
 
+# Testing files
+frontend/static/app.js
+frontend/static/style.css
+frontend/static/static
+
 # Node modules (if any)
 node_modules/
 
