@@ -1742,7 +1742,7 @@ function navegar(pagina) {
     conteudo.innerHTML = `
       <div class="form-destacado">
         <h2>Incluir Protocolo</h2>
-        <form id="form-protocolo" autocomplete="off" style="max-width:1000px;">
+        <form id="form-protocolo" autocomplete="off" style="max-width:1200px;">
           <div style="display:flex;gap:12px;flex-wrap:wrap;">
             <div style="flex:1;min-width:180px;">
               <label>Número do Protocolo *</label>
@@ -2821,7 +2821,7 @@ function montarFormularioEditar(p) {
   const temExigenciaPreenchida = hasExigData(1) || hasExigData(2) || hasExigData(3);
 
   document.getElementById('form-editar').innerHTML = `
-    <form id="form-editar-protocolo" autocomplete="off" style="max-width:1000px;">
+    <form id="form-editar-protocolo" autocomplete="off" style="max-width:1200px;">
       <div style="background:#e8f5e8;padding:12px;border-radius:6px;margin-bottom:16px;border:1px solid #c8e6c9;">
         <strong>📋 Editando Protocolo:</strong> ${esc(p.numero)} | <strong>👤 Requerente:</strong> ${esc(p.nome_requerente)} | <strong>🔢 CPF:</strong> ${esc(formatCpf(p.cpf))}
       </div>
