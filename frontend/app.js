@@ -1774,8 +1774,8 @@ function navegar(pagina) {
             </div>
             <div style="width:180px;">
               <label>WhatsApp</label>
-              <input type="text" id="whatsapp-incluir" name="whatsapp" maxlength="15" 
-                     inputmode="numeric" placeholder="(00) 00000-0000" style="width:100%;">
+              <input type="text" id="whatsapp-incluir" name="whatsapp" maxlength="20" value="+5524" 
+                     inputmode="tel" placeholder="+5524" style="width:100%;">
             </div>
             <div style="width:180px;">
               <label>Categoria *</label>
@@ -2771,17 +2771,17 @@ function montarFormularioEditar(p) {
       
       const numero = p.numero;
       const nomeRequerente = p.nome_requerente;
-      const titulo = p.titulo || 'Não informado';
+      const nomeParteAto = p.nome_parte_ato || nomeRequerente;
       const status = p.status || 'Não informado';
       const whatsappNumber = p.whatsapp || '';
+      const usuarioLogado = sessao.usuario || 'Atendente';
       
-      // Format the message
+      // Format the message with the new template
       const mensagem = encodeURIComponent(
-        `📋 *Protocolo ${numero}*\n\n` +
-        `👤 Requerente: ${nomeRequerente}\n` +
-        `📄 Assunto: ${titulo}\n` +
-        `📊 Status: ${status}\n\n` +
-        `Para mais informações, entre em contato com nosso atendimento.`
+        `Olá, Sr.(a) *${nomeRequerente}*\n\n` +
+        `O 📋 *Protocolo ${numero}*, em nome de: *${nomeParteAto}*, está com 📊 Status: ${status}.\n\n` +
+        `Para retirar seu pedido é preciso apresentar o *protocolo original*, caso tenha perdido apenas o requerente poderá retirar.\n\n` +
+        `Atenciosamente\n${usuarioLogado}`
       );
       
       // Open WhatsApp desktop/mobile app with the message
@@ -2842,8 +2842,8 @@ function montarFormularioEditar(p) {
         </div>
         <div style="width:180px;">
           <label>WhatsApp</label>
-          <input type="text" id="whatsapp-editar" name="whatsapp" value="${esc(p.whatsapp || '')}" maxlength="15" 
-                 inputmode="numeric" placeholder="(00) 00000-0000" style="width:100%;">
+          <input type="text" id="whatsapp-editar" name="whatsapp" value="${esc(p.whatsapp || '+5524')}" maxlength="20" 
+                 inputmode="tel" placeholder="+5524" style="width:100%;">
         </div>
         <div style="width:180px;">
           <label>Categoria *</label>
