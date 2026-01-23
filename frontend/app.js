@@ -2790,7 +2790,8 @@ function montarFormularioEditar(p) {
         ? `whatsapp://send?phone=${encodeURIComponent(whatsappNumber.replace(/\D/g, ''))}&text=${mensagem}`
         : `whatsapp://send?text=${mensagem}`;
       
-      window.location.href = whatsappUrl;
+      // Use window.open to avoid navigating away from the current page
+      window.open(whatsappUrl, '_blank');
     };
   }
   
