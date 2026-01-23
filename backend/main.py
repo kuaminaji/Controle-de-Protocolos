@@ -28,7 +28,7 @@ from bson.json_util import dumps as bson_dumps, loads as bson_loads
 from fastapi import FastAPI, HTTPException, Query, Body, Request, Depends, UploadFile, File, status
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field, validator, ValidationError
+from pydantic import BaseModel, Field, field_validator, ValidationError
 from pymongo import MongoClient, errors
 from pymongo.collection import Collection
 from pymongo import ASCENDING, DESCENDING
@@ -94,6 +94,7 @@ class ProtocoloModel(BaseModel):
     numero: str = Field(..., min_length=5, max_length=10, description="Número do protocolo, 5-10 dígitos numéricos.")
     nome_requerente: str = Field(..., max_length=60)
     cpf: str = Field(..., min_length=11, max_length=14)
+    whatsapp: str = Field(default="", max_length=20)
     titulo: str = Field(..., max_length=120)
     nome_parte_ato: str = Field(default="", max_length=120)
     outras_infos: str = Field(default="", max_length=120)
@@ -120,33 +121,38 @@ class ProtocoloModel(BaseModel):
     exig3_reapresentada_por: str = Field(default="", max_length=60)
     exig3_data_reapresentacao: str = Field(default="", max_length=10)
     
-    @validator('numero')
+    @field_validator('numero')
+    @classmethod
     def numero_valido(cls, v):
         if not v.isdigit() or not (5 <= len(v) <= 10):
             raise ValueError("Número do protocolo deve conter entre 5 e 10 dígitos.")
         return v
     
-    @validator('cpf')
+    @field_validator('cpf')
+    @classmethod
     def cpf_valido(cls, v):
         if not validar_cpf(v):
             raise ValueError("CPF inválido. Informe um CPF válido.")
         return v
     
-    @validator('status')
+    @field_validator('status')
+    @classmethod
     def status_valido(cls, v):
         allowed = {"Pendente", "Em andamento", "Concluído", "Exigência", "EXCLUIDO"}
         if v not in allowed:
             raise ValueError("Status inválido.")
         return v
     
-    @validator('categoria')
+    @field_validator('categoria')
+    @classmethod
     def categoria_valida(cls, v):
         allowed = get_allowed_categorias()
         if v not in allowed:
             raise ValueError("Categoria inválida.")
         return v
     
-    @validator('data_criacao')
+    @field_validator('data_criacao')
+    @classmethod
     def data_criacao_valida(cls, v):
         try:
             data = datetime.strptime(v, "%Y-%m-%d").replace(tzinfo=timezone.utc)
@@ -166,7 +172,8 @@ class CategoriaModel(BaseModel):
     nome: str = Field(..., min_length=1, max_length=60)
     descricao: Optional[str] = Field(default="", max_length=240)
 
-    @validator('nome')
+    @field_validator('nome')
+    @classmethod
     def nome_strip(cls, v):
         v2 = v.strip()
         if not v2:
@@ -675,6 +682,12 @@ def incluir_protocolo(protocolo: ProtocoloModel):
     if categoria == "IDT":
         categoria = "RTD"
     cpf = apenas_digitos(cpf_raw)
+    
+    # Convert names to uppercase
+    nome_requerente = protocolo.nome_requerente.strip().upper()
+    nome_parte_ato = protocolo.nome_parte_ato.strip().upper()
+    whatsapp = apenas_digitos(protocolo.whatsapp.strip()) if protocolo.whatsapp and protocolo.whatsapp.strip() else ""
+    
     if len(numero) != 5:
         raise HTTPException(status_code=400, detail="Número do protocolo deve conter exatamente 5 dígitos.")
     if not validar_cpf(cpf):
@@ -695,6 +708,9 @@ def incluir_protocolo(protocolo: ProtocoloModel):
         novo["observacoes"] = re.sub(r"<br\s*/?>", "\n", novo["observacoes"])
     novo["numero"] = numero
     novo["cpf"] = cpf
+    novo["whatsapp"] = whatsapp
+    novo["nome_requerente"] = nome_requerente
+    novo["nome_parte_ato"] = nome_parte_ato
     novo["status"] = status
     novo["categoria"] = categoria
     novo["ultima_alteracao_nome"] = protocolo.ultima_alteracao_nome or protocolo.responsavel or ""
@@ -975,6 +991,15 @@ def editar_protocolo(id: str, protocolo: dict):
         if not validar_cpf(cpf_new):
             raise HTTPException(status_code=400, detail="CPF inválido. Informe um CPF válido.")
         atualizacao["cpf"] = cpf_new
+    
+    # Convert names to uppercase
+    if "nome_requerente" in atualizacao:
+        atualizacao["nome_requerente"] = str(atualizacao["nome_requerente"]).strip().upper()
+    if "nome_parte_ato" in atualizacao:
+        atualizacao["nome_parte_ato"] = str(atualizacao["nome_parte_ato"]).strip().upper()
+    if "whatsapp" in atualizacao:
+        atualizacao["whatsapp"] = apenas_digitos(str(atualizacao.get("whatsapp", "")))
+    
     if "status" in atualizacao:
         status_novo = str(atualizacao["status"]).strip()
         if status_novo not in ALLOWED_STATUS:
@@ -1190,8 +1215,11 @@ def nome_requerente_por_cpf(cpf: str):
     cpf_puro = apenas_digitos(cpf)
     p = protocolos_coll.find_one({"cpf": cpf_puro}, sort=[("data_criacao_dt", DESCENDING)])
     if p:
-        return {"nome_requerente": p.get("nome_requerente", "")}
-    return {"nome_requerente": ""}
+        return {
+            "nome_requerente": p.get("nome_requerente", ""),
+            "whatsapp": p.get("whatsapp", "")
+        }
+    return {"nome_requerente": "", "whatsapp": ""}
 
 @app.get("/api/protocolo/exigencias-pendentes")
 def protocolos_exigencias_pendentes_get(

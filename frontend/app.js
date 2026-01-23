@@ -776,6 +776,95 @@ function attachCpfMask(elOrId) {
   el.addEventListener("input", () => el.value = formatCpf(el.value));
 }
 
+// WhatsApp formatting functions
+function formatWhatsApp(value) {
+  const d = somenteDigitos(value).slice(0, 13); // +55 + 11 digits max (total 13)
+  if (d.length === 0) return "";
+  if (d.length <= 2) return `+${d}`;
+  if (d.length <= 4) return `+${d.slice(0,2)}(${d.slice(2)}`;
+  if (d.length <= 9) return `+${d.slice(0,2)}(${d.slice(2,4)})${d.slice(4)}`;
+  return `+${d.slice(0,2)}(${d.slice(2,4)})${d.slice(4,9)}-${d.slice(9)}`;
+}
+
+function setupWhatsAppInput(inputEl) {
+  if (!inputEl) return;
+  inputEl.addEventListener("input", () => {
+    inputEl.value = formatWhatsApp(inputEl.value);
+  });
+}
+
+function attachWhatsAppMask(elOrId) {
+  const el = typeof elOrId === 'string' ? document.getElementById(elOrId) : elOrId;
+  setupWhatsAppInput(el);
+}
+
+// Reusable uppercase conversion function
+function setupUppercaseInput(inputEl) {
+  if (!inputEl) return;
+  inputEl.addEventListener("input", function() {
+    const start = this.selectionStart;
+    const end = this.selectionEnd;
+    this.value = this.value.toUpperCase();
+    this.setSelectionRange(start, end);
+  });
+}
+
+// WhatsApp message template constant
+const WHATSAPP_MESSAGE_TEMPLATE = (nomeRequerente, numeroProtocolo, nomeParteAto, nomeUsuario) => 
+  `Olá, *${nomeRequerente}.*
+
+O Protocolo nº *${numeroProtocolo}* em nome de: *${nomeParteAto}* foi finalizado e está pronto para ser retirado.
+
+Para a retirada, é necessário apresentar o protocolo original.
+
+Caso tenha perdido o documento, a retirada poderá ser feita apenas pelo titular da solicitação, mediante apresentação de documento com foto.
+
+Atenciosamente,
+${nomeUsuario}`;
+
+// Function to send WhatsApp message
+function enviarMensagemWhatsApp(protocolo) {
+  const sessao = getSessao();
+  if (!sessao) {
+    mostrarMensagem("Sessão expirada", "erro");
+    return;
+  }
+  
+  const nomeRequerente = protocolo.nome_requerente || "NÃO INFORMADO";
+  const numeroProtocolo = protocolo.numero || "NÃO INFORMADO";
+  const nomeParteAto = protocolo.nome_parte_ato || "NÃO INFORMADO";
+  const nomeUsuario = sessao.usuario || "NÃO INFORMADO";
+  const whatsapp = protocolo.whatsapp || "";
+  
+  if (!whatsapp) {
+    mostrarMensagem("Número do WhatsApp não cadastrado para este protocolo.", "erro");
+    return;
+  }
+  
+  // Format phone number - remove all non-digits
+  const phoneNumber = somenteDigitos(whatsapp);
+  
+  // Validate Brazilian mobile number (13 digits: 55 + 2 area code + 9 mobile digits)
+  if (phoneNumber.length < 12 || phoneNumber.length > 13) {
+    mostrarMensagem("Número do WhatsApp inválido. Deve ter 12 ou 13 dígitos (incluindo +55).", "erro");
+    return;
+  }
+  
+  // Create message using template
+  const mensagem = WHATSAPP_MESSAGE_TEMPLATE(nomeRequerente, numeroProtocolo, nomeParteAto, nomeUsuario);
+  
+  // Encode message for URL
+  const mensagemEncoded = encodeURIComponent(mensagem);
+  
+  // Use whatsapp:// protocol to open desktop app directly on Windows
+  const whatsappUrl = `whatsapp://send?phone=${phoneNumber}&text=${mensagemEncoded}`;
+  
+  // Try to open WhatsApp desktop app
+  window.location.href = whatsappUrl;
+  
+  mostrarMensagem("Abrindo WhatsApp Desktop...", "sucesso", 3000);
+}
+
 /* ====================== [BLOCO 7: VALIDAÇÃO GENÉRICA E FEEDBACK] ====================== */
 function validarCamposObrigatorios(campos) {
   return campos.every(id => {
@@ -1772,16 +1861,10 @@ function navegar(pagina) {
               <label>Nome do Requerente *</label>
               <input type="text" id="nome-requerente" name="nome_requerente" maxlength="60" required style="width:100%;">
             </div>
-            <div style="width:300px;">
-              <label>Título/Assunto *</label>
-              <input type="text" id="titulo" name="titulo" maxlength="120" required style="width:100%;">
-            </div>
-          </div>
-          
-          <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap;">
-            <div style="flex:1;min-width:250px;">
-              <label>Nome da parte no ato</label>
-              <input type="text" id="nome-parte-ato" name="nome_parte_ato" maxlength="120" style="width:100%;">
+            <div style="width:220px;">
+              <label>WhatsApp</label>
+              <input type="text" id="whatsapp-incluir" name="whatsapp" maxlength="20" value="+5524"
+                     inputmode="numeric" placeholder="+55(24)00000-0000" style="width:100%;">
             </div>
             <div style="width:220px;">
               <label>Status *</label>
@@ -1796,6 +1879,17 @@ function navegar(pagina) {
                 <option value="">Selecione</option>
                 ${CATEGORIA_OPTIONS.map(c => `<option>${esc(c)}</option>`).join('')}
               </select>
+            </div>
+          </div>
+          
+          <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap;">
+            <div style="width:300px;">
+              <label>Título/Assunto *</label>
+              <input type="text" id="titulo" name="titulo" maxlength="120" required style="width:100%;">
+            </div>
+            <div style="flex:1;min-width:250px;">
+              <label>Nome da parte no ato</label>
+              <input type="text" id="nome-parte-ato" name="nome_parte_ato" maxlength="120" style="width:100%;">
             </div>
           </div>
           
@@ -1888,21 +1982,47 @@ function navegar(pagina) {
     const cpfFeedback = document.getElementById("cpf-incluir-feedback");
     setupCpfInput(cpfInput, cpfFeedback, btnSalvarIncluir);
     
-    // Auto-preenchimento do nome do requerente
+    // Configuração do WhatsApp
+    const whatsappInput = document.getElementById("whatsapp-incluir");
+    setupWhatsAppInput(whatsappInput);
+    
+    // Auto-uppercase para Nome do Requerente e Nome da Parte no Ato
+    setupUppercaseInput(document.getElementById("nome-requerente"));
+    setupUppercaseInput(document.getElementById("nome-parte-ato"));
+    
+    // Auto-preenchimento do nome do requerente e WhatsApp
     cpfInput.addEventListener("blur", async () => {
       const cpf = somenteDigitos(cpfInput.value);
       const nomeInput = document.getElementById("nome-requerente");
-      if (cpf.length === 11 && isCpfValido(cpf) && !nomeInput.value.trim()) {
-        try {
-          const resp = await fetchWithAuth("/api/protocolo/nome_requerente_por_cpf?cpf=" + cpf);
-          if (resp.ok) {
-            const data = await resp.json();
-            if (data.nome_requerente) {
-              nomeInput.value = data.nome_requerente;
-              mostrarMensagem("Nome do requerente preenchido automaticamente", "sucesso", 3000);
+      const whatsappInput = document.getElementById("whatsapp-incluir");
+      
+      if (cpf.length === 11 && isCpfValido(cpf)) {
+        const shouldFillNome = !nomeInput.value.trim();
+        const shouldFillWhatsApp = !whatsappInput.value.trim() || whatsappInput.value === "+5524";
+        
+        if (shouldFillNome || shouldFillWhatsApp) {
+          try {
+            const resp = await fetchWithAuth("/api/protocolo/nome_requerente_por_cpf?cpf=" + cpf);
+            if (resp.ok) {
+              const data = await resp.json();
+              
+              if (shouldFillNome && data.nome_requerente) {
+                nomeInput.value = data.nome_requerente;
+              }
+              
+              if (shouldFillWhatsApp && data.whatsapp) {
+                whatsappInput.value = formatWhatsApp(data.whatsapp);
+              }
+              
+              if (data.nome_requerente || data.whatsapp) {
+                const mensagens = [];
+                if (data.nome_requerente) mensagens.push("nome");
+                if (data.whatsapp) mensagens.push("WhatsApp");
+                mostrarMensagem(`Dados preenchidos automaticamente: ${mensagens.join(" e ")}`, "sucesso", 3000);
+              }
             }
-          }
-        } catch {}
+          } catch {}
+        }
       }
     });
 
@@ -1922,6 +2042,9 @@ function navegar(pagina) {
         mostrarMensagem("CPF inválido.", "erro");
         return;
       }
+      
+      // Process WhatsApp number
+      dados.whatsapp = somenteDigitos(dados.whatsapp || "");
       
       dados.ultima_alteracao_nome = sessao.usuario;
       mostrarLoader("Salvando protocolo...");
@@ -1978,10 +2101,10 @@ function navegar(pagina) {
         
         <form id="form-busca" autocomplete="off" style="max-width:1100px;">
           <div style="display:flex;gap:12px;margin-bottom:8px;flex-wrap:wrap;">
-            <div style="flex:1;min-width:250px;">
+            <div class="busca-global-container" style="flex:1;min-width:250px;">
               <label>Busca global</label>
               <input type="text" id="buscar-palavra" maxlength="50" 
-                     placeholder="Qualquer termo, número, nome, título..." style="width:100;">
+                     placeholder="Qualquer termo, número, nome, título..." style="width:100%;">
             </div>
             <div style="width:220px;">
               <label>Número do Protocolo</label>
@@ -2768,6 +2891,15 @@ function montarFormularioEditar(p) {
         <strong>📋 Editando Protocolo:</strong> ${esc(p.numero)} | <strong>👤 Requerente:</strong> ${esc(p.nome_requerente)} | <strong>🔢 CPF:</strong> ${esc(formatCpf(p.cpf))}
       </div>
       
+      <div style="margin-bottom:16px;display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
+        <button type="button" id="voltar-menu-editar-form-top">← Voltar ao Menu</button>
+        ${p.status === 'Concluído' && p.whatsapp ? `
+          <button type="button" id="btn-enviar-whatsapp" style="background:#25D366;color:white;">
+            📱 Enviar Mensagem WhatsApp
+          </button>
+        ` : ''}
+      </div>
+      
       <div style="display:flex;gap:12px;flex-wrap:wrap;">
         <div style="flex:1;min-width:200px;">
           <label>Número do Protocolo *</label>
@@ -2795,6 +2927,10 @@ function montarFormularioEditar(p) {
           <label>CPF *</label>
           <input type="text" id="cpf-editar" name="cpf" value="${esc(formatCpf(p.cpf))}" maxlength="14" required style="width:100%;">
           <div id="cpf-editar-feedback" class="campo-feedback hint">Informe 11 dígitos</div>
+        </div>
+        <div style="width:200px;">
+          <label>WhatsApp</label>
+          <input type="text" id="whatsapp-editar" name="whatsapp" value="${esc(formatWhatsApp(p.whatsapp || ''))}" maxlength="20" inputmode="numeric" placeholder="+55(24)00000-0000" style="width:100%;">
         </div>
         <div style="width:220px;">
           <label>Status *</label>
@@ -2903,10 +3039,10 @@ function montarFormularioEditar(p) {
         </div>
       </div>
       
-      <div style="margin-top:20px;display:flex;gap:12px;flex-wrap:wrap;">
+      <div style="margin-top:20px;display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
         <button type="submit" id="btn-salvar-editar">💾 Salvar Alterações</button>
         <button type="button" id="btn-ver-historico">📋 Ver histórico</button>
-        <button type="button" id="voltar-menu-editar-form">← Voltar ao Menu</button>
+        <button type="button" id="voltar-menu-editar-form-bottom">← Voltar ao Menu</button>
       </div>
     </form>
     <div id="historico-lista" style="margin-top:20px;"></div>
@@ -2943,6 +3079,24 @@ function montarFormularioEditar(p) {
   const cpfInput = document.getElementById("cpf-editar");
   const feedback = document.getElementById("cpf-editar-feedback");
   setupCpfInput(cpfInput, feedback);
+
+  // Configurar WhatsApp
+  const whatsappInput = document.getElementById("whatsapp-editar");
+  if (whatsappInput) {
+    setupWhatsAppInput(whatsappInput);
+  }
+  
+  // Auto-uppercase para Nome do Requerente e Nome da Parte no Ato
+  setupUppercaseInput(document.getElementById("editar-nome-requerente"));
+  setupUppercaseInput(document.getElementById("editar-nome-parte-ato"));
+  
+  // WhatsApp button handler
+  const btnEnviarWhatsapp = document.getElementById("btn-enviar-whatsapp");
+  if (btnEnviarWhatsapp) {
+    btnEnviarWhatsapp.onclick = function() {
+      enviarMensagemWhatsApp(p);
+    };
+  }
 
   // ADICIONAR EVENTO PARA O BOTÃO DE INCLUIR EXIGÊNCIA
   document.getElementById("btn-incluir-exigencia").onclick = function() {
@@ -3007,6 +3161,7 @@ function montarFormularioEditar(p) {
     let dados = Object.fromEntries(new FormData(e.target).entries());
     delete dados.responsavel;
     dados.cpf = somenteDigitos(dados.cpf);
+    dados.whatsapp = somenteDigitos(dados.whatsapp || "");
     
     // Validar retirada
     const rp = (dados.retirado_por || "").trim();
@@ -3041,7 +3196,12 @@ function montarFormularioEditar(p) {
   };
   
   document.getElementById("btn-ver-historico").onclick = () => verHistorico(p.id);
-  document.getElementById("voltar-menu-editar-form").onclick = menuInicial;
+  
+  // Handle both top and bottom "Voltar ao Menu" buttons
+  const voltarTopBtn = document.getElementById("voltar-menu-editar-form-top");
+  const voltarBottomBtn = document.getElementById("voltar-menu-editar-form-bottom");
+  if (voltarTopBtn) voltarTopBtn.onclick = menuInicial;
+  if (voltarBottomBtn) voltarBottomBtn.onclick = menuInicial;
 }
 
 // ====================== [BLOCO 21: HISTÓRICO DETALHADO] ====================== //
