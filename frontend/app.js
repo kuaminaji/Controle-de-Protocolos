@@ -2179,7 +2179,7 @@ function navegar(pagina) {
             <div style="margin-left:auto;align-self:flex-end;">
               <button type="submit">🔍 Carregar</button>
               <button type="button" id="voltar-menu-editar">← Voltar ao Menu</button>
-              <button type="button" id="btn-whatsapp-mensagem" style="display:none;">💬 Enviar Mensagem WhatsApp</button>
+              <button type="button" id="btn-whatsapp-mensagem" style="display:none;background:#25d366;color:white;border:none;padding:10px 20px;border-radius:8px;font-weight:600;cursor:pointer;">💬 Enviar Mensagem WhatsApp</button>
             </div>
           </div>
           <div style="margin-top:8px;color:#666;font-size:0.9em;">
@@ -2784,13 +2784,13 @@ function montarFormularioEditar(p) {
         `Para mais informações, entre em contato com nosso atendimento.`
       );
       
-      // Open WhatsApp Web with the message
+      // Open WhatsApp desktop/mobile app with the message
       // If phone number is provided, send directly to that number
       const whatsappUrl = whatsappNumber 
-        ? `https://web.whatsapp.com/send?phone=${encodeURIComponent(whatsappNumber.replace(/\D/g, ''))}&text=${mensagem}`
-        : `https://web.whatsapp.com/send?text=${mensagem}`;
+        ? `whatsapp://send?phone=${encodeURIComponent(whatsappNumber.replace(/\D/g, ''))}&text=${mensagem}`
+        : `whatsapp://send?text=${mensagem}`;
       
-      window.open(whatsappUrl, '_blank');
+      window.location.href = whatsappUrl;
     };
   }
   
