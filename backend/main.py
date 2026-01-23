@@ -1215,8 +1215,11 @@ def nome_requerente_por_cpf(cpf: str):
     cpf_puro = apenas_digitos(cpf)
     p = protocolos_coll.find_one({"cpf": cpf_puro}, sort=[("data_criacao_dt", DESCENDING)])
     if p:
-        return {"nome_requerente": p.get("nome_requerente", "")}
-    return {"nome_requerente": ""}
+        return {
+            "nome_requerente": p.get("nome_requerente", ""),
+            "whatsapp": p.get("whatsapp", "")
+        }
+    return {"nome_requerente": "", "whatsapp": ""}
 
 @app.get("/api/protocolo/exigencias-pendentes")
 def protocolos_exigencias_pendentes_get(

@@ -782,8 +782,8 @@ function formatWhatsApp(value) {
   if (d.length === 0) return "";
   if (d.length <= 2) return `+${d}`;
   if (d.length <= 4) return `+${d.slice(0,2)}(${d.slice(2)}`;
-  if (d.length <= 9) return `+${d.slice(0,2)}(${d.slice(2,4)}) ${d.slice(4)}`;
-  return `+${d.slice(0,2)}(${d.slice(2,4)}) ${d.slice(4,9)}-${d.slice(9)}`;
+  if (d.length <= 9) return `+${d.slice(0,2)}(${d.slice(2,4)})${d.slice(4)}`;
+  return `+${d.slice(0,2)}(${d.slice(2,4)})${d.slice(4,9)}-${d.slice(9)}`;
 }
 
 function setupWhatsAppInput(inputEl) {
@@ -1851,20 +1851,20 @@ function navegar(pagina) {
           </div>
           
           <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap;">
-            <div style="flex:1;min-width:250px;">
-              <label>Nome do Requerente *</label>
-              <input type="text" id="nome-requerente" name="nome_requerente" maxlength="60" required style="width:100%;">
-            </div>
             <div style="width:220px;">
               <label>CPF *</label>
               <input type="text" id="cpf-incluir" name="cpf" maxlength="14" required 
                      inputmode="numeric" placeholder="000.000.000-00" style="width:100%;">
               <div id="cpf-incluir-feedback" class="campo-feedback hint">Informe 11 dígitos</div>
             </div>
+            <div style="flex:1;min-width:250px;">
+              <label>Nome do Requerente *</label>
+              <input type="text" id="nome-requerente" name="nome_requerente" maxlength="60" required style="width:100%;">
+            </div>
             <div style="width:220px;">
               <label>WhatsApp</label>
               <input type="text" id="whatsapp-incluir" name="whatsapp" maxlength="20" value="+5524"
-                     inputmode="numeric" placeholder="+55(00) 00000-0000" style="width:100%;">
+                     inputmode="numeric" placeholder="+55(24)00000-0000" style="width:100%;">
             </div>
             <div style="width:220px;">
               <label>Status *</label>
@@ -1990,21 +1990,39 @@ function navegar(pagina) {
     setupUppercaseInput(document.getElementById("nome-requerente"));
     setupUppercaseInput(document.getElementById("nome-parte-ato"));
     
-    // Auto-preenchimento do nome do requerente
+    // Auto-preenchimento do nome do requerente e WhatsApp
     cpfInput.addEventListener("blur", async () => {
       const cpf = somenteDigitos(cpfInput.value);
       const nomeInput = document.getElementById("nome-requerente");
-      if (cpf.length === 11 && isCpfValido(cpf) && !nomeInput.value.trim()) {
-        try {
-          const resp = await fetchWithAuth("/api/protocolo/nome_requerente_por_cpf?cpf=" + cpf);
-          if (resp.ok) {
-            const data = await resp.json();
-            if (data.nome_requerente) {
-              nomeInput.value = data.nome_requerente;
-              mostrarMensagem("Nome do requerente preenchido automaticamente", "sucesso", 3000);
+      const whatsappInput = document.getElementById("whatsapp-incluir");
+      
+      if (cpf.length === 11 && isCpfValido(cpf)) {
+        const shouldFillNome = !nomeInput.value.trim();
+        const shouldFillWhatsApp = !whatsappInput.value.trim() || whatsappInput.value === "+5524";
+        
+        if (shouldFillNome || shouldFillWhatsApp) {
+          try {
+            const resp = await fetchWithAuth("/api/protocolo/nome_requerente_por_cpf?cpf=" + cpf);
+            if (resp.ok) {
+              const data = await resp.json();
+              
+              if (shouldFillNome && data.nome_requerente) {
+                nomeInput.value = data.nome_requerente;
+              }
+              
+              if (shouldFillWhatsApp && data.whatsapp) {
+                whatsappInput.value = formatWhatsApp(data.whatsapp);
+              }
+              
+              if (data.nome_requerente || data.whatsapp) {
+                const mensagens = [];
+                if (data.nome_requerente) mensagens.push("nome");
+                if (data.whatsapp) mensagens.push("WhatsApp");
+                mostrarMensagem(`Dados preenchidos automaticamente: ${mensagens.join(" e ")}`, "sucesso", 3000);
+              }
             }
-          }
-        } catch {}
+          } catch {}
+        }
       }
     });
 
@@ -2912,7 +2930,7 @@ function montarFormularioEditar(p) {
         </div>
         <div style="width:200px;">
           <label>WhatsApp</label>
-          <input type="text" id="whatsapp-editar" name="whatsapp" value="${esc(formatWhatsApp(p.whatsapp || ''))}" maxlength="20" inputmode="numeric" placeholder="+55(00) 00000-0000" style="width:100%;">
+          <input type="text" id="whatsapp-editar" name="whatsapp" value="${esc(formatWhatsApp(p.whatsapp || ''))}" maxlength="20" inputmode="numeric" placeholder="+55(24)00000-0000" style="width:100%;">
         </div>
         <div style="width:220px;">
           <label>Status *</label>
