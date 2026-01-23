@@ -1770,7 +1770,7 @@ function navegar(pagina) {
             </div>
             <div style="flex:1;min-width:200px;">
               <label>Nome do Requerente *</label>
-              <input type="text" id="nome-requerente" name="nome_requerente" maxlength="60" required style="width:100%;">
+              <input type="text" id="nome-requerente" name="nome_requerente" maxlength="60" required style="width:100%;text-transform:uppercase;">
             </div>
             <div style="width:170px;">
               <label>WhatsApp</label>
@@ -1796,15 +1796,15 @@ function navegar(pagina) {
           <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap;">
             <div style="flex:1;min-width:200px;">
               <label>Nome da parte no ato</label>
-              <input type="text" id="nome-parte-ato" name="nome_parte_ato" maxlength="120" style="width:100%;">
+              <input type="text" id="nome-parte-ato" name="nome_parte_ato" maxlength="120" style="width:100%;text-transform:uppercase;">
             </div>
             <div style="flex:1;min-width:250px;">
               <label>Título/Assunto *</label>
-              <input type="text" id="titulo" name="titulo" maxlength="120" required style="width:100%;">
+              <input type="text" id="titulo" name="titulo" maxlength="120" required style="width:100%;text-transform:uppercase;">
             </div>
             <div style="flex:1;min-width:250px;">
               <label>Outras Informações / Cartorio do Ato Original</label>
-              <input type="text" name="outras_infos" maxlength="120" style="width:100%;">
+              <input type="text" name="outras_infos" maxlength="120" style="width:100%;text-transform:uppercase;">
             </div>
           </div>
           
@@ -1906,21 +1906,44 @@ function navegar(pagina) {
             
             // Auto-preencher nome se não estiver preenchido
             if (data.nome_requerente && !nomeInput.value.trim()) {
-              nomeInput.value = data.nome_requerente;
+              nomeInput.value = data.nome_requerente.toUpperCase();
               mostrarMensagem("Nome do requerente preenchido automaticamente", "sucesso", 3000);
             }
             
             // Auto-preencher WhatsApp se disponível e campo não foi alterado
             if (data.whatsapp && (whatsappInput.value === "+55(24)" || !whatsappInput.value.trim())) {
               whatsappInput.value = data.whatsapp;
-              if (data.nome_requerente) {
+              if (data.nome_requerente && !nomeInput.value.trim()) {
+                mostrarMensagem("Nome e WhatsApp preenchidos automaticamente", "sucesso", 3000);
+              } else if (data.nome_requerente) {
                 mostrarMensagem("Nome e WhatsApp preenchidos automaticamente", "sucesso", 3000);
               } else {
                 mostrarMensagem("WhatsApp preenchido automaticamente", "sucesso", 3000);
               }
+            } else if (data.whatsapp) {
+              console.log("WhatsApp não preenchido. Valor atual:", whatsappInput.value);
             }
           }
         } catch {}
+      }
+    });
+
+    // Converter campos para maiúsculas ao digitar
+    const uppercaseFields = [
+      document.getElementById("nome-requerente"),
+      document.getElementById("nome-parte-ato"),
+      document.getElementById("titulo"),
+      document.querySelector('input[name="outras_infos"]')
+    ];
+    
+    uppercaseFields.forEach(field => {
+      if (field) {
+        field.addEventListener("input", function() {
+          const start = this.selectionStart;
+          const end = this.selectionEnd;
+          this.value = this.value.toUpperCase();
+          this.setSelectionRange(start, end);
+        });
       }
     });
 
@@ -2852,7 +2875,7 @@ function montarFormularioEditar(p) {
         </div>
         <div style="flex:1;min-width:200px;">
           <label>Nome do Requerente *</label>
-          <input type="text" id="editar-nome-requerente" name="nome_requerente" value="${esc(p.nome_requerente)}" maxlength="60" required style="width:100%;">
+          <input type="text" id="editar-nome-requerente" name="nome_requerente" value="${esc(p.nome_requerente)}" maxlength="60" required style="width:100%;text-transform:uppercase;">
         </div>
         <div style="width:170px;">
           <label>WhatsApp</label>
@@ -2876,15 +2899,15 @@ function montarFormularioEditar(p) {
       <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap;">
         <div style="flex:1;min-width:200px;">
           <label>Nome da parte no ato</label>
-          <input type="text" id="editar-nome-parte-ato" name="nome_parte_ato" value="${esc(p.nome_parte_ato || '')}" maxlength="120" style="width:100%;">
+          <input type="text" id="editar-nome-parte-ato" name="nome_parte_ato" value="${esc(p.nome_parte_ato || '')}" maxlength="120" style="width:100%;text-transform:uppercase;">
         </div>
         <div style="flex:1;min-width:250px;">
           <label>Título/Assunto *</label>
-          <input type="text" id="editar-titulo" name="titulo" value="${esc(p.titulo)}" maxlength="120" required style="width:100%;">
+          <input type="text" id="editar-titulo" name="titulo" value="${esc(p.titulo)}" maxlength="120" required style="width:100%;text-transform:uppercase;">
         </div>
         <div style="flex:1;min-width:250px;">
           <label>Outras Informações / Cartorio do Ato Original</label>
-          <input type="text" id="editar-outras-infos" name="outras_infos" value="${esc(p.outras_infos || '')}" maxlength="120" style="width:100%;">
+          <input type="text" id="editar-outras-infos" name="outras_infos" value="${esc(p.outras_infos || '')}" maxlength="120" style="width:100%;text-transform:uppercase;">
         </div>
       </div>
       
@@ -3020,6 +3043,25 @@ function montarFormularioEditar(p) {
   if (temExigenciaPreenchida) {
     document.getElementById("btn-incluir-exigencia").style.display = "none";
   }
+
+  // Converter campos para maiúsculas ao digitar (edit form)
+  const uppercaseFieldsEdit = [
+    document.getElementById("editar-nome-requerente"),
+    document.getElementById("editar-nome-parte-ato"),
+    document.getElementById("editar-titulo"),
+    document.getElementById("editar-outras-infos")
+  ];
+  
+  uppercaseFieldsEdit.forEach(field => {
+    if (field) {
+      field.addEventListener("input", function() {
+        const start = this.selectionStart;
+        const end = this.selectionEnd;
+        this.value = this.value.toUpperCase();
+        this.setSelectionRange(start, end);
+      });
+    }
+  });
 
   document.getElementById("form-editar-protocolo").onsubmit = async function(e) {
     e.preventDefault();
