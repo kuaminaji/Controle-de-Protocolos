@@ -2812,14 +2812,52 @@ function montarFormularioEditar(p) {
       const status = p.status || 'Não informado';
       const whatsappNumber = p.whatsapp || '';
       const usuarioLogado = sessao.usuario || 'Atendente';
+      const observacoes = p.observacoes || '';
       
-      // Format the message with the new template
-      const mensagem = encodeURIComponent(
-        `Olá, Sr.(a) *${nomeRequerente}*\n\n` +
-        `O 📋 *Protocolo ${numero}*, em nome de: *${nomeParteAto}*, está com 📊 Status: ${status}.\n\n` +
-        `Para retirar seu pedido é preciso apresentar o *protocolo original*, caso tenha perdido apenas o requerente poderá retirar.\n\n` +
-        `Atenciosamente\n${usuarioLogado}`
-      );
+      // Format the message based on status
+      let mensagem = '';
+      
+      // Convert status to uppercase for comparison
+      const statusUpper = status.toUpperCase().trim();
+      
+      if (statusUpper === 'CONCLUIDO' || statusUpper === 'CONCLUÍDO') {
+        // Message for CONCLUIDO status
+        mensagem = encodeURIComponent(
+          `Olá, Sr.(a) *${nomeRequerente}*\n\n` +
+          `O 📋 *Protocolo ${numero}*, em nome de: *${nomeParteAto}*, está com 📊 Status: ${status}.\n\n` +
+          `Para retirar seu pedido é preciso apresentar o *protocolo original*, caso tenha perdido apenas o requerente poderá retirar.\n\n` +
+          `Atenciosamente\n${usuarioLogado}`
+        );
+      } else if (statusUpper === 'EM ANDAMENTO') {
+        // Message for EM ANDAMENTO status
+        mensagem = encodeURIComponent(
+          `Olá, Sr.(a) *${nomeRequerente}*\n\n` +
+          `O 📋 *Protocolo ${numero}*, em nome de: *${nomeParteAto}*, está com 📊 Status: ${status}.\n\n` +
+          `Seu protocolo está na fila de processos e em breve vamos lhe dar um retorno.\n\n` +
+          `Atenciosamente\n${usuarioLogado}`
+        );
+      } else if (statusUpper === 'EXIGENCIA' || statusUpper === 'EXIGÊNCIA') {
+        // Message for EXIGENCIA status (includes observações/exigências)
+        const exigenciasTexto = observacoes.trim() 
+          ? `\n${observacoes}\n` 
+          : '\n(Sem exigências especificadas)\n';
+        
+        mensagem = encodeURIComponent(
+          `Olá, Sr.(a) *${nomeRequerente}*\n\n` +
+          `O 📋 *Protocolo ${numero}*, em nome de: *${nomeParteAto}*, está com 📊 Status: ${status}.\n\n` +
+          `Para darmos continuidade precisamos que as EXIGENCIAS abaixo sejam cumprida:` +
+          exigenciasTexto +
+          `\nAtenciosamente\n${usuarioLogado}`
+        );
+      } else {
+        // Default message for other statuses
+        mensagem = encodeURIComponent(
+          `Olá, Sr.(a) *${nomeRequerente}*\n\n` +
+          `O 📋 *Protocolo ${numero}*, em nome de: *${nomeParteAto}*, está com 📊 Status: ${status}.\n\n` +
+          `Para mais informações, entre em contato com nosso atendimento.\n\n` +
+          `Atenciosamente\n${usuarioLogado}`
+        );
+      }
       
       // Open WhatsApp desktop/mobile app with the message
       // If phone number is provided, send directly to that number

@@ -197,6 +197,8 @@ body {
   bottom:0;
   z-index:2000;
   transition: transform var(--transition-slow);
+  overflow-y: auto; /* Add vertical scrollbar for smaller screens */
+  overflow-x: hidden; /* Prevent horizontal scrolling */
 }
 .menu-top { display:flex; gap:12px; align-items:center; margin-bottom:18px; }
 .menu-logo { width:48px; height:48px; border-radius:var(--radius-md); object-fit:cover; }
