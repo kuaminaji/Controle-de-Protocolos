@@ -1117,7 +1117,19 @@ function mostrarBoasVindas() {
   const sessao = getSessao();
   if (!sessao) return;
   
+  // Check if welcome screen was already shown today
   const hoje = new Date();
+  const dataHoje = hoje.toISOString().slice(0, 10); // YYYY-MM-DD format
+  const ultimaExibicao = localStorage.getItem('ultima_exibicao_boas_vindas');
+  
+  // If already shown today, don't show again
+  if (ultimaExibicao === dataHoje) {
+    return;
+  }
+  
+  // Mark as shown today
+  localStorage.setItem('ultima_exibicao_boas_vindas', dataHoje);
+  
   const dataFormatada = hoje.toLocaleDateString('pt-BR');
   
   const modalHTML = `
@@ -2019,7 +2031,7 @@ function navegar(pagina) {
         
         <form id="form-busca" autocomplete="off" style="max-width:1100px;">
           <div style="display:flex;gap:12px;margin-bottom:8px;flex-wrap:wrap;">
-            <div style="flex:1;min-width:300px;">
+            <div style="flex:1;min-width:400px;">
               <label>Busca global</label>
               <input type="text" id="buscar-palavra" maxlength="50" 
                      placeholder="Qualquer termo, número, nome, título..." style="width:100%;">

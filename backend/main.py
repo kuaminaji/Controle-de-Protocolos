@@ -94,6 +94,7 @@ class ProtocoloModel(BaseModel):
     numero: str = Field(..., min_length=5, max_length=10, description="Número do protocolo, 5-10 dígitos numéricos.")
     nome_requerente: str = Field(..., max_length=60)
     cpf: str = Field(..., min_length=11, max_length=14)
+    whatsapp: str = Field(default="", max_length=20)
     titulo: str = Field(..., max_length=120)
     nome_parte_ato: str = Field(default="", max_length=120)
     outras_infos: str = Field(default="", max_length=120)
