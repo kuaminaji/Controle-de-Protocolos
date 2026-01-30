@@ -93,7 +93,8 @@ def get_allowed_categorias() -> set:
 class ProtocoloModel(BaseModel):
     numero: str = Field(..., min_length=5, max_length=10, description="Número do protocolo, 5-10 dígitos numéricos.")
     nome_requerente: str = Field(..., max_length=60)
-    cpf: str = Field(..., min_length=11, max_length=14)
+    cpf: str = Field(default="", min_length=0, max_length=14)  # Made optional
+    sem_cpf: bool = Field(default=False)  # Flag for clients without CPF
     whatsapp: str = Field(default="", max_length=20)
     titulo: str = Field(..., max_length=120)
     nome_parte_ato: str = Field(default="", max_length=120)
@@ -678,8 +679,15 @@ def incluir_protocolo(protocolo: ProtocoloModel):
     cpf = apenas_digitos(cpf_raw)
     if len(numero) != 5:
         raise HTTPException(status_code=400, detail="Número do protocolo deve conter exatamente 5 dígitos.")
-    if not validar_cpf(cpf):
-        raise HTTPException(status_code=400, detail="CPF inválido. Informe um CPF válido.")
+    
+    # Only validate CPF if sem_cpf is False
+    if not protocolo.sem_cpf:
+        if not validar_cpf(cpf):
+            raise HTTPException(status_code=400, detail="CPF inválido. Informe um CPF válido.")
+    else:
+        # If sem_cpf is True, set CPF to empty string
+        cpf = ""
+    
     if status not in ALLOWED_STATUS:
         raise HTTPException(status_code=400, detail="Status inválido.")
     allowed_cats = get_allowed_categorias()
@@ -721,18 +729,20 @@ def incluir_protocolo(protocolo: ProtocoloModel):
         logger.info(f"Protocolo {numero} criado")
         
         # Update nome_requerente and whatsapp in all other protocols with the same CPF
-        update_data = {}
-        if novo.get("nome_requerente"):
-            update_data["nome_requerente"] = novo["nome_requerente"]
-        if novo.get("whatsapp"):
-            update_data["whatsapp"] = novo["whatsapp"]
-        
-        if update_data:
-            protocolos_coll.update_many(
-                {"cpf": cpf, "numero": {"$ne": numero}},
-                {"$set": update_data}
-            )
-            logger.info(f"Dados do requerente atualizados para CPF {cpf}")
+        # Only sync if CPF is provided (not empty)
+        if cpf:
+            update_data = {}
+            if novo.get("nome_requerente"):
+                update_data["nome_requerente"] = novo["nome_requerente"]
+            if novo.get("whatsapp"):
+                update_data["whatsapp"] = novo["whatsapp"]
+            
+            if update_data:
+                protocolos_coll.update_many(
+                    {"cpf": cpf, "numero": {"$ne": numero}},
+                    {"$set": update_data}
+                )
+                logger.info(f"Dados do requerente atualizados para CPF {cpf}")
         
         return {"id": protocolo_id}
     except errors.DuplicateKeyError:

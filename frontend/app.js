@@ -1779,6 +1779,12 @@ function navegar(pagina) {
               <input type="text" id="cpf-incluir" name="cpf" maxlength="14" required 
                      inputmode="numeric" placeholder="000.000.000-00" style="width:100%;">
               <div id="cpf-incluir-feedback" class="campo-feedback hint">Informe 11 dígitos</div>
+              <div style="margin-top:4px;">
+                <label style="font-size:12px;font-weight:normal;cursor:pointer;display:flex;align-items:center;gap:4px;">
+                  <input type="checkbox" id="sem-cpf-checkbox" style="cursor:pointer;">
+                  <span>Cliente Sem CPF</span>
+                </label>
+              </div>
             </div>
             <div style="flex:1;min-width:200px;">
               <label>Nome do Requerente *</label>
@@ -1902,10 +1908,35 @@ function navegar(pagina) {
     // Configuração do CPF
     const cpfInput = document.getElementById("cpf-incluir");
     const cpfFeedback = document.getElementById("cpf-incluir-feedback");
+    const semCpfCheckbox = document.getElementById("sem-cpf-checkbox");
     setupCpfInput(cpfInput, cpfFeedback, btnSalvarIncluir);
+    
+    // Lógica do checkbox "Cliente Sem CPF"
+    semCpfCheckbox.addEventListener("change", function() {
+      if (this.checked) {
+        // Desabilitar campo CPF e remover required
+        cpfInput.disabled = true;
+        cpfInput.required = false;
+        cpfInput.value = "";
+        cpfFeedback.textContent = "CPF não obrigatório";
+        cpfFeedback.className = "campo-feedback hint";
+        // Desabilitar validação do CPF
+        cpfInput.style.backgroundColor = "#f5f5f5";
+      } else {
+        // Habilitar campo CPF e adicionar required
+        cpfInput.disabled = false;
+        cpfInput.required = true;
+        cpfFeedback.textContent = "Informe 11 dígitos";
+        cpfFeedback.className = "campo-feedback hint";
+        cpfInput.style.backgroundColor = "";
+      }
+    });
     
     // Auto-preenchimento do nome do requerente e WhatsApp
     cpfInput.addEventListener("blur", async () => {
+      // Não executar se checkbox está marcado
+      if (semCpfCheckbox.checked) return;
+      
       const cpf = somenteDigitos(cpfInput.value);
       const nomeInput = document.getElementById("nome-requerente");
       const whatsappInput = document.getElementById("whatsapp-incluir");
@@ -1970,10 +2001,19 @@ function navegar(pagina) {
         return;
       }
       
-      dados.cpf = somenteDigitos(dados.cpf || "");
-      if (!/^\d{11}$/.test(dados.cpf) || !isCpfValido(dados.cpf)) {
-        mostrarMensagem("CPF inválido.", "erro");
-        return;
+      // Adicionar o estado do checkbox sem_cpf
+      dados.sem_cpf = semCpfCheckbox.checked;
+      
+      // Validar CPF apenas se checkbox não estiver marcado
+      if (!semCpfCheckbox.checked) {
+        dados.cpf = somenteDigitos(dados.cpf || "");
+        if (!/^\d{11}$/.test(dados.cpf) || !isCpfValido(dados.cpf)) {
+          mostrarMensagem("CPF inválido.", "erro");
+          return;
+        }
+      } else {
+        // Se checkbox marcado, enviar CPF vazio
+        dados.cpf = "";
       }
       
       dados.ultima_alteracao_nome = sessao.usuario;
