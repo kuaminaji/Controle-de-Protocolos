@@ -93,8 +93,8 @@ def get_allowed_categorias() -> set:
 class ProtocoloModel(BaseModel):
     numero: str = Field(..., min_length=5, max_length=10, description="Número do protocolo, 5-10 dígitos numéricos.")
     nome_requerente: str = Field(..., max_length=60)
-    cpf: str = Field(default="", min_length=0, max_length=14)  # Made optional
     sem_cpf: bool = Field(default=False, description="Flag indicating client without CPF")
+    cpf: str = Field(default="", min_length=0, max_length=14)  # Made optional
     whatsapp: str = Field(default="", max_length=20)
     titulo: str = Field(..., max_length=120)
     nome_parte_ato: str = Field(default="", max_length=120)
