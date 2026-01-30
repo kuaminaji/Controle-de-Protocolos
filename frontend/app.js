@@ -1932,6 +1932,20 @@ function navegar(pagina) {
       }
     });
     
+    // Event listener no campo CPF - desabilitar checkbox se CPF digitado
+    cpfInput.addEventListener("input", function() {
+      const cpfValue = cpfInput.value.trim();
+      if (cpfValue && cpfValue !== "") {
+        semCpfCheckbox.disabled = true;
+        semCpfCheckbox.style.opacity = "0.5";
+        semCpfCheckbox.style.cursor = "not-allowed";
+      } else {
+        semCpfCheckbox.disabled = false;
+        semCpfCheckbox.style.opacity = "1";
+        semCpfCheckbox.style.cursor = "pointer";
+      }
+    });
+    
     // Auto-preenchimento do nome do requerente e WhatsApp
     cpfInput.addEventListener("blur", async () => {
       // Não executar se checkbox está marcado
@@ -3161,6 +3175,20 @@ function montarFormularioEditar(p) {
         feedback.textContent = "Informe 11 dígitos";
         feedback.className = "campo-feedback hint";
         cpfInput.style.backgroundColor = "";
+      }
+    });
+    
+    // Event listener no campo CPF - desabilitar checkbox se CPF digitado
+    cpfInput.addEventListener("input", function() {
+      const cpfValue = cpfInput.value.trim();
+      if (cpfValue && cpfValue !== "") {
+        semCpfCheckboxEditar.disabled = true;
+        semCpfCheckboxEditar.style.opacity = "0.5";
+        semCpfCheckboxEditar.style.cursor = "not-allowed";
+      } else {
+        semCpfCheckboxEditar.disabled = false;
+        semCpfCheckboxEditar.style.opacity = "1";
+        semCpfCheckboxEditar.style.cursor = "pointer";
       }
     });
   }
