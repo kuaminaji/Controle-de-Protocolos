@@ -94,7 +94,7 @@ class ProtocoloModel(BaseModel):
     numero: str = Field(..., min_length=5, max_length=10, description="Número do protocolo, 5-10 dígitos numéricos.")
     nome_requerente: str = Field(..., max_length=60)
     cpf: str = Field(default="", min_length=0, max_length=14)  # Made optional
-    sem_cpf: bool = Field(default=False)  # Flag for clients without CPF
+    sem_cpf: bool = Field(default=False, description="Flag indicating client without CPF")
     whatsapp: str = Field(default="", max_length=20)
     titulo: str = Field(..., max_length=120)
     nome_parte_ato: str = Field(default="", max_length=120)
@@ -129,7 +129,10 @@ class ProtocoloModel(BaseModel):
         return v
     
     @validator('cpf')
-    def cpf_valido(cls, v):
+    def cpf_valido(cls, v, values):
+        # Allow empty CPF when sem_cpf flag is True
+        if values.get('sem_cpf', False) and not v:
+            return v
         if not validar_cpf(v):
             raise ValueError("CPF inválido. Informe um CPF válido.")
         return v
@@ -996,11 +999,20 @@ def editar_protocolo(id: str, protocolo: dict):
         else:
             atualizacao.pop("numero", None)
     atualizacao.pop("responsavel", None)
+    
+    # Handle sem_cpf flag
+    sem_cpf = atualizacao.get("sem_cpf", False)
+    
     if "cpf" in atualizacao:
         cpf_new = apenas_digitos(str(atualizacao["cpf"]))
-        if not validar_cpf(cpf_new):
-            raise HTTPException(status_code=400, detail="CPF inválido. Informe um CPF válido.")
-        atualizacao["cpf"] = cpf_new
+        # Only validate CPF if sem_cpf is False
+        if not sem_cpf:
+            if not validar_cpf(cpf_new):
+                raise HTTPException(status_code=400, detail="CPF inválido. Informe um CPF válido.")
+            atualizacao["cpf"] = cpf_new
+        else:
+            # If sem_cpf is True, set CPF to empty string
+            atualizacao["cpf"] = ""
     if "status" in atualizacao:
         status_novo = str(atualizacao["status"]).strip()
         if status_novo not in ALLOWED_STATUS:
@@ -1101,8 +1113,11 @@ def editar_protocolo(id: str, protocolo: dict):
         logger.info(f"Protocolo {prot.get('numero', '')} editado")
         
         # Update nome_requerente and whatsapp in all other protocols with the same CPF
+        # Only sync if CPF is present and sem_cpf is False
         cpf_atualizado = atualizacao.get("cpf") or prot.get("cpf")
-        if cpf_atualizado:
+        sem_cpf_flag = atualizacao.get("sem_cpf", prot.get("sem_cpf", False))
+        
+        if cpf_atualizado and not sem_cpf_flag:
             update_data = {}
             if "nome_requerente" in atualizacao and atualizacao.get("nome_requerente"):
                 update_data["nome_requerente"] = atualizacao["nome_requerente"]

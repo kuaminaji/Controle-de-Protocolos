@@ -2035,6 +2035,15 @@ function navegar(pagina) {
           document.getElementById('data-criacao').value = hoje;
           document.getElementById('responsavel').value = sessao.usuario;
           numeroInput.dispatchEvent(new Event("input"));
+          // Resetar checkbox e restaurar estado do CPF
+          if (semCpfCheckbox) {
+            semCpfCheckbox.checked = false;
+            cpfInput.disabled = false;
+            cpfInput.required = true;
+            cpfInput.style.backgroundColor = "";
+            cpfFeedback.textContent = "Informe 11 dígitos";
+            cpfFeedback.className = "campo-feedback hint";
+          }
         } else {
           const erro = await resp.json().catch(()=>({}));
           mostrarMensagem(erro.detail || "Erro ao salvar protocolo.", "erro");
@@ -2962,6 +2971,12 @@ function montarFormularioEditar(p) {
           <label>CPF *</label>
           <input type="text" id="cpf-editar" name="cpf" value="${esc(formatCpf(p.cpf))}" maxlength="14" required style="width:100%;">
           <div id="cpf-editar-feedback" class="campo-feedback hint">Informe 11 dígitos</div>
+          <div style="margin-top:4px;">
+            <label style="font-size:12px;font-weight:normal;cursor:pointer;display:flex;align-items:center;gap:4px;">
+              <input type="checkbox" id="sem-cpf-checkbox-editar" ${!p.cpf || p.sem_cpf ? 'checked' : ''} style="cursor:pointer;">
+              <span>Cliente Sem CPF</span>
+            </label>
+          </div>
         </div>
         <div style="flex:1;min-width:200px;">
           <label>Nome do Requerente *</label>
@@ -3118,7 +3133,37 @@ function montarFormularioEditar(p) {
   // Configurar CPF
   const cpfInput = document.getElementById("cpf-editar");
   const feedback = document.getElementById("cpf-editar-feedback");
+  const semCpfCheckboxEditar = document.getElementById("sem-cpf-checkbox-editar");
   setupCpfInput(cpfInput, feedback);
+  
+  // Lógica do checkbox "Cliente Sem CPF" para editar
+  if (semCpfCheckboxEditar) {
+    // Set initial state based on checkbox
+    if (semCpfCheckboxEditar.checked) {
+      cpfInput.disabled = true;
+      cpfInput.required = false;
+      cpfInput.style.backgroundColor = "#f5f5f5";
+      feedback.textContent = "CPF não obrigatório";
+      feedback.className = "campo-feedback hint";
+    }
+    
+    semCpfCheckboxEditar.addEventListener("change", function() {
+      if (this.checked) {
+        cpfInput.disabled = true;
+        cpfInput.required = false;
+        cpfInput.value = "";
+        feedback.textContent = "CPF não obrigatório";
+        feedback.className = "campo-feedback hint";
+        cpfInput.style.backgroundColor = "#f5f5f5";
+      } else {
+        cpfInput.disabled = false;
+        cpfInput.required = true;
+        feedback.textContent = "Informe 11 dígitos";
+        feedback.className = "campo-feedback hint";
+        cpfInput.style.backgroundColor = "";
+      }
+    });
+  }
 
   // ADICIONAR EVENTO PARA O BOTÃO DE INCLUIR EXIGÊNCIA
   document.getElementById("btn-incluir-exigencia").onclick = function() {
@@ -3164,7 +3209,15 @@ function montarFormularioEditar(p) {
       return;
     }
     
-    const camposObrigatorios = ["editar-data-criacao","editar-nome-requerente","cpf-editar","editar-titulo","editar-status","editar-categoria"];
+    // Verificar se checkbox sem CPF está marcado
+    const semCpfChecked = semCpfCheckboxEditar && semCpfCheckboxEditar.checked;
+    
+    // Ajustar campos obrigatórios baseado no checkbox
+    let camposObrigatorios = ["editar-data-criacao","editar-nome-requerente","editar-titulo","editar-status","editar-categoria"];
+    if (!semCpfChecked) {
+      camposObrigatorios.push("cpf-editar");
+    }
+    
     if (!validarCamposObrigatorios(camposObrigatorios)) {
       mostrarMensagem("Preencha todos os campos obrigatórios.", "erro");
       return;
@@ -3201,7 +3254,17 @@ function montarFormularioEditar(p) {
     
     let dados = Object.fromEntries(new FormData(e.target).entries());
     delete dados.responsavel;
-    dados.cpf = somenteDigitos(dados.cpf);
+    
+    // Adicionar o estado do checkbox sem_cpf
+    dados.sem_cpf = semCpfChecked;
+    
+    // Validar CPF apenas se checkbox não estiver marcado
+    if (!semCpfChecked) {
+      dados.cpf = somenteDigitos(dados.cpf);
+    } else {
+      // Se checkbox marcado, enviar CPF vazio
+      dados.cpf = "";
+    }
     
     // Validar retirada
     const rp = (dados.retirado_por || "").trim();
