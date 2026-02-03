@@ -346,16 +346,441 @@ form button:hover { transform: translateY(-3px); }
 @keyframes spin { to { transform: rotate(360deg); } }
 .loader-msg { color:var(--muted); font-weight:700; }
 
-/* responsive adjustments */
-@media (max-width: 1100px) {
-  #menu-lateral { position:relative; width:100%; top:64px; left:0; }
-  main { margin-left:0; padding: 120px 16px 28px 16px; }
+/* ====================== [RESPONSIVE - MOBILE FIRST] ====================== */
+
+/* Touch-friendly base */
+@media (max-width: 1024px) {
+  /* Increase touch targets */
+  .menu-btn, .icon-btn, form button, .dashboard-btn {
+    min-height: 44px;
+    min-width: 44px;
+  }
 }
-@media (max-width: 700px) {
-  .brand-sub { display:none; }
-  .brand-name { font-size:1rem; }
-  .menu-logo { width:40px; height:40px; }
-  .topbar-inner { padding:12px 14px; }
+
+/* Tablet and below (< 1024px) */
+@media (max-width: 1024px) {
+  :root {
+    --sidebar-width: 220px;
+    --max-width: 100%;
+    --gutter: 12px;
+  }
+  
+  .topbar-inner {
+    padding: 10px 16px;
+  }
+  
+  .brand-logo {
+    width: 36px;
+    height: 36px;
+  }
+  
+  .brand-name {
+    font-size: 0.95rem;
+  }
+  
+  .brand-sub {
+    font-size: 0.75rem;
+  }
+  
+  /* Menu lateral ajustado */
+  #menu-lateral {
+    width: 200px;
+  }
+  
+  main {
+    margin-left: 200px;
+    padding: 80px 16px 32px 16px;
+    max-width: calc(100% - 200px);
+  }
+  
+  /* Forms: reduzir gaps */
+  .linha-campos, .linha-form {
+    gap: 12px;
+  }
+  
+  /* Cards: menor padding */
+  .dashboard-card {
+    padding: 14px;
+    min-width: 140px;
+  }
+  
+  .form-destacado {
+    padding: 20px;
+  }
+}
+
+/* Mobile landscape and small tablets (< 768px) */
+@media (max-width: 768px) {
+  :root {
+    --sidebar-width: 100%;
+    --padding-input: 10px 12px;
+  }
+  
+  /* Topbar: simplificar */
+  .topbar-inner {
+    padding: 8px 12px;
+    gap: 8px;
+  }
+  
+  .brand-sub {
+    display: none;
+  }
+  
+  .brand-name {
+    font-size: 0.9rem;
+  }
+  
+  .user-btn {
+    padding: 6px 10px;
+    font-size: 0.9rem;
+  }
+  
+  /* Menu lateral: full width, collapsible */
+  #menu-lateral {
+    position: fixed;
+    width: 280px;
+    left: -280px;
+    top: 56px;
+    bottom: 0;
+    transition: left 0.3s ease;
+    z-index: 5000;
+    box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+  }
+  
+  #menu-lateral.menu-open {
+    left: 0;
+  }
+  
+  /* Botão hamburguer */
+  .menu-toggle {
+    display: block !important;
+    background: transparent;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    padding: 8px;
+  }
+  
+  /* Main sem margin lateral */
+  main {
+    margin-left: 0;
+    padding: 70px 12px 24px 12px;
+    max-width: 100%;
+  }
+  
+  /* Forms: stack verticalmente */
+  .linha-campos, .linha-form {
+    flex-direction: column;
+    gap: 10px;
+  }
+  
+  .linha-campos > div,
+  .linha-form > div {
+    width: 100% !important;
+    min-width: 100% !important;
+    flex: 1 1 100% !important;
+  }
+  
+  /* Inputs e selects: full width */
+  form input,
+  form select,
+  form textarea {
+    width: 100%;
+    font-size: 16px; /* Previne zoom no iOS */
+  }
+  
+  /* Botões: full width ou melhor distribuídos */
+  form button,
+  .dashboard-btn {
+    width: 100%;
+    margin-bottom: 8px;
+  }
+  
+  /* Cards: stack verticalmente */
+  .dashboard-cards {
+    flex-direction: column;
+  }
+  
+  .dashboard-card {
+    width: 100%;
+    min-width: 100%;
+  }
+  
+  /* Tabelas: scroll horizontal */
+  .dashboard-table-categoria,
+  .protocolo-horizontal,
+  .user-list-admin {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  .dashboard-table-categoria th,
+  .dashboard-table-categoria td,
+  .protocolo-horizontal th,
+  .protocolo-horizontal td,
+  .user-list-admin th,
+  .user-list-admin td {
+    padding: 8px 6px;
+    font-size: 0.85em;
+    white-space: nowrap;
+  }
+  
+  /* Login: ajustar */
+  #login-container {
+    width: 95%;
+    padding: 24px 20px;
+    max-height: calc(100vh - 20px);
+  }
+  
+  .login-header h2 {
+    font-size: 1.3em;
+  }
+  
+  /* Notificações: full width em mobile */
+  #notificacoes-container {
+    left: 0;
+    right: 0;
+    top: 56px;
+    max-width: 100%;
+  }
+  
+  #notificacoes-panel {
+    border-radius: 0;
+    max-height: calc(100vh - 56px);
+  }
+  
+  /* Message box: melhor posicionamento */
+  #message-box {
+    top: 60px;
+    max-width: 90vw;
+    font-size: 0.9em;
+  }
+  
+  /* Welcome modal: ajustar */
+  .welcome-modal-card {
+    padding: 24px;
+    width: 95%;
+  }
+  
+  .welcome-modal-card .welcome-title {
+    font-size: 1.8em;
+  }
+  
+  .welcome-modal-card .welcome-user {
+    font-size: 1.5em;
+  }
+  
+  .emoji-animation {
+    width: 80px;
+    height: 80px;
+  }
+  
+  .emoji-cool {
+    font-size: 70px;
+  }
+}
+
+/* Mobile portrait (< 640px) */
+@media (max-width: 640px) {
+  :root {
+    --radius: 8px;
+    --radius-md: 6px;
+    --padding-input: 8px 10px;
+    --padding-btn: 8px 12px;
+  }
+  
+  body {
+    font-size: 14px;
+  }
+  
+  /* Topbar: ainda mais compacto */
+  .topbar-inner {
+    padding: 6px 10px;
+  }
+  
+  .brand-logo {
+    width: 32px;
+    height: 32px;
+  }
+  
+  .brand-name {
+    font-size: 0.85rem;
+  }
+  
+  .icon-btn {
+    padding: 6px 8px;
+    font-size: 16px;
+  }
+  
+  .badge {
+    min-width: 16px;
+    height: 16px;
+    font-size: 10px;
+    line-height: 16px;
+  }
+  
+  /* Menu lateral: full width */
+  #menu-lateral {
+    width: 100%;
+    left: -100%;
+  }
+  
+  #menu-lateral.menu-open {
+    left: 0;
+  }
+  
+  /* Main: padding mínimo */
+  main {
+    padding: 60px 8px 20px 8px;
+  }
+  
+  h2 {
+    font-size: 1.1em;
+    margin-bottom: 12px;
+  }
+  
+  .section-title {
+    font-size: 0.95em;
+  }
+  
+  /* Forms: padding reduzido */
+  .form-destacado {
+    padding: 16px;
+    margin: 8px 0 20px 0;
+  }
+  
+  /* Campos: menor */
+  form .campo {
+    margin-bottom: 10px;
+  }
+  
+  form label {
+    font-size: 0.9em;
+    margin-bottom: 4px;
+  }
+  
+  form input,
+  form select,
+  form textarea {
+    padding: 10px;
+    font-size: 16px; /* Mantém 16px para evitar zoom no iOS */
+  }
+  
+  /* Botões: padding menor */
+  form button,
+  .dashboard-btn {
+    padding: 10px;
+    font-size: 0.95em;
+  }
+  
+  /* Cards: padding mínimo */
+  .dashboard-card {
+    padding: 12px;
+  }
+  
+  .dashboard-card .card-title {
+    font-size: 0.9em;
+  }
+  
+  .dashboard-card .card-value {
+    font-size: 1.3em;
+  }
+  
+  /* Login: muito compacto */
+  #login-container {
+    padding: 20px 16px;
+  }
+  
+  .login-header img {
+    max-width: 100px;
+  }
+  
+  .login-header h2 {
+    font-size: 1.2em;
+  }
+  
+  #form-login input,
+  #form-login select {
+    padding: 10px;
+    font-size: 16px;
+  }
+  
+  /* Welcome modal: muito compacto */
+  .welcome-modal-card {
+    padding: 20px 16px;
+  }
+  
+  .welcome-modal-card .welcome-title {
+    font-size: 1.5em;
+  }
+  
+  .welcome-modal-card .welcome-user {
+    font-size: 1.2em;
+  }
+  
+  .welcome-modal-card .welcome-msg {
+    font-size: 1.1em;
+  }
+  
+  .welcome-modal-card .trabalho-msg {
+    font-size: 1em;
+  }
+  
+  .emoji-animation {
+    width: 60px;
+    height: 60px;
+  }
+  
+  .emoji-cool {
+    font-size: 50px;
+  }
+  
+  .welcome-modal-card .welcome-btn {
+    padding: 12px 30px;
+    font-size: 1em;
+  }
+}
+
+/* Landscape phones */
+@media (max-width: 896px) and (orientation: landscape) {
+  main {
+    padding-top: 70px;
+    padding-bottom: 16px;
+  }
+  
+  .welcome-modal-card {
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+}
+
+/* Large desktops (> 1440px) */
+@media (min-width: 1440px) {
+  :root {
+    --max-width: 1400px;
+  }
+  
+  .topbar-inner {
+    max-width: 1400px;
+  }
+}
+
+/* Print styles */
+@media print {
+  .topbar,
+  #menu-lateral,
+  .menu-toggle,
+  form button,
+  .dashboard-btn {
+    display: none !important;
+  }
+  
+  main {
+    margin-left: 0;
+    padding: 0;
+    max-width: 100%;
+  }
 }
 
 /* small helpers used by JS enhancements */

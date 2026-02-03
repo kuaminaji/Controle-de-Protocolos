@@ -4608,6 +4608,52 @@ function debounce(fn, wait) {
 
 // ====================== [BLOCO 26: INICIALIZAÇÃO DE COMPONENTES] ====================== //
 document.addEventListener('DOMContentLoaded', function() {
+  // ====================== MOBILE MENU TOGGLE ======================
+  const menuToggle = document.getElementById('menu-toggle');
+  const menuLateral = document.getElementById('menu-lateral');
+  
+  // Show/hide hamburger button based on screen size
+  function updateMenuToggleVisibility() {
+    if (window.innerWidth <= 768) {
+      if (menuToggle) menuToggle.style.display = 'block';
+    } else {
+      if (menuToggle) menuToggle.style.display = 'none';
+      if (menuLateral) menuLateral.classList.remove('menu-open');
+    }
+  }
+  
+  // Toggle menu on button click
+  if (menuToggle && menuLateral) {
+    menuToggle.addEventListener('click', function(e) {
+      e.stopPropagation();
+      menuLateral.classList.toggle('menu-open');
+    });
+    
+    // Close menu when clicking outside
+    document.addEventListener('click', function(e) {
+      if (menuLateral.classList.contains('menu-open') && 
+          !menuLateral.contains(e.target) && 
+          !menuToggle.contains(e.target)) {
+        menuLateral.classList.remove('menu-open');
+      }
+    });
+    
+    // Close menu when clicking a menu item
+    const menuButtons = menuLateral.querySelectorAll('.menu-btn');
+    menuButtons.forEach(btn => {
+      btn.addEventListener('click', function() {
+        if (window.innerWidth <= 768) {
+          menuLateral.classList.remove('menu-open');
+        }
+      });
+    });
+  }
+  
+  // Update on load and resize
+  updateMenuToggleVisibility();
+  window.addEventListener('resize', updateMenuToggleVisibility);
+  
+  // ====================== NOTIFICATIONS ======================
   // Click handler for notification button
   const btnNotificacoes = document.getElementById('btn-notificacoes');
   if (btnNotificacoes) {
