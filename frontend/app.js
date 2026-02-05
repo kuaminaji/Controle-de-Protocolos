@@ -3314,8 +3314,25 @@ function montarFormularioEditar(p) {
       
       esconderLoader();
       if (resp.ok) {
-        mostrarMensagem('Alterações salvas com sucesso!', 'sucesso');
-        navegar('editar');
+        mostrarMensagem('Alterações salvas com sucesso! Recarregando protocolo...', 'sucesso');
+        
+        // Recarregar o protocolo atualizado
+        try {
+          const respProtocolo = await fetchWithAuth('/api/protocolo/' + p.id);
+          if (respProtocolo.ok) {
+            const protocoloAtualizado = await respProtocolo.json();
+            // Reabrir o protocolo em modo de edição com dados atualizados
+            montarFormularioEditar(protocoloAtualizado);
+            // Scroll para o topo para melhor UX
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          } else {
+            // Se falhar ao recarregar, apenas navegar para editar
+            navegar('editar');
+          }
+        } catch {
+          // Se falhar ao recarregar, apenas navegar para editar
+          navegar('editar');
+        }
       } else {
         const erro = await resp.json().catch(() => ({}));
         mostrarMensagem(erro.detail || 'Erro ao salvar alterações!', 'erro');
