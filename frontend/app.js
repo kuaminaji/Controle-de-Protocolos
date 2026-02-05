@@ -1205,6 +1205,267 @@ async function verificarAtrasos() {
   }
 }
 
+// Function to verify and send WhatsApp to finished protocols
+async function verificarProtocolosFinalizados() {
+  const dateInput = document.getElementById('batch-whatsapp-date');
+  const resultsDiv = document.getElementById('batch-whatsapp-results');
+  
+  if (!dateInput || !resultsDiv) {
+    mostrarMensagem('Erro: elementos não encontrados', 'erro');
+    return;
+  }
+  
+  const data = dateInput.value;
+  if (!data) {
+    mostrarMensagem('Por favor, selecione uma data', 'erro');
+    return;
+  }
+  
+  // Show loading
+  resultsDiv.innerHTML = `
+    <div style="text-align:center;padding:20px;">
+      <div class="loader" style="width:30px;height:30px;margin:0 auto 10px;"></div>
+      <p>Buscando protocolos finalizados...</p>
+    </div>
+  `;
+  
+  try {
+    // Fetch finished protocols for the date
+    const resp = await fetchWithAuth(`/api/protocolo/finalizados/${data}`);
+    
+    if (!resp.ok) {
+      const erro = await resp.json().catch(() => ({}));
+      resultsDiv.innerHTML = `
+        <div style="color:#dc3545;text-align:center;padding:20px;">
+          ❌ ${erro.detail || 'Erro ao buscar protocolos'}
+        </div>
+      `;
+      return;
+    }
+    
+    const protocolos = await resp.json();
+    
+    if (!protocolos || protocolos.length === 0) {
+      resultsDiv.innerHTML = `
+        <div style="text-align:center;padding:20px;color:#666;">
+          ℹ️ Nenhum protocolo finalizado encontrado para esta data.
+        </div>
+      `;
+      return;
+    }
+    
+    // Filter only protocols with WhatsApp
+    const comWhatsapp = protocolos.filter(p => p.whatsapp && p.whatsapp.trim());
+    
+    if (comWhatsapp.length === 0) {
+      resultsDiv.innerHTML = `
+        <div style="text-align:center;padding:20px;color:#666;">
+          ℹ️ Encontrados ${protocolos.length} protocolo(s), mas nenhum tem WhatsApp cadastrado.
+        </div>
+      `;
+      return;
+    }
+    
+    // Show list of protocols
+    let html = `
+      <div style="background:white;padding:15px;border-radius:6px;border:1px solid #dee2e6;">
+        <h4 style="margin:0 0 15px 0;">📋 Protocolos Encontrados: ${comWhatsapp.length}</h4>
+        <div id="batch-protocol-list">
+    `;
+    
+    comWhatsapp.forEach((p, index) => {
+      const jaEnviado = p.whatsapp_enviado_em;
+      const statusClass = jaEnviado ? 'ja-enviado' : 'aguardando';
+      const statusText = jaEnviado 
+        ? `✅ Já enviado (${p.whatsapp_enviado_em})` 
+        : '⏳ Aguardando';
+      
+      html += `
+        <div id="batch-item-${index}" style="padding:10px;margin-bottom:8px;border:1px solid #e0e0e0;border-radius:4px;background:#fafafa;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div>
+              <strong>Protocolo ${esc(p.numero)}</strong> - ${esc(p.nome_requerente)}
+              <br>
+              <small style="color:#666;">📱 WhatsApp: ${esc(p.whatsapp)}</small>
+            </div>
+            <div id="batch-status-${index}" style="padding:4px 12px;border-radius:4px;font-size:13px;font-weight:600;">
+              ${statusText}
+            </div>
+          </div>
+        </div>
+      `;
+    });
+    
+    html += `
+        </div>
+        <div style="margin-top:15px;display:flex;justify-content:space-between;align-items:center;">
+          <div id="batch-progress" style="flex:1;margin-right:15px;">
+            <div style="background:#e0e0e0;height:8px;border-radius:4px;overflow:hidden;">
+              <div id="batch-progress-bar" style="width:0%;height:100%;background:#25d366;transition:width 0.3s;"></div>
+            </div>
+            <small id="batch-progress-text" style="color:#666;margin-top:4px;display:block;">Pronto para iniciar</small>
+          </div>
+          <button id="btn-start-batch" onclick="iniciarEnvioEmLote(${JSON.stringify(comWhatsapp).replace(/"/g, '&quot;')})" 
+                  style="background:#25d366;color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-weight:600;">
+            🚀 Iniciar Envio
+          </button>
+        </div>
+      </div>
+    `;
+    
+    resultsDiv.innerHTML = html;
+    
+  } catch (error) {
+    console.error('Erro ao verificar protocolos:', error);
+    resultsDiv.innerHTML = `
+      <div style="color:#dc3545;text-align:center;padding:20px;">
+        ❌ Falha ao conectar ao servidor
+      </div>
+    `;
+  }
+}
+
+// Function to start batch sending
+async function iniciarEnvioEmLote(protocolos) {
+  const btnStart = document.getElementById('btn-start-batch');
+  const progressBar = document.getElementById('batch-progress-bar');
+  const progressText = document.getElementById('batch-progress-text');
+  
+  if (!btnStart || !progressBar || !progressText) {
+    mostrarMensagem('Erro: elementos não encontrados', 'erro');
+    return;
+  }
+  
+  // Disable button
+  btnStart.disabled = true;
+  btnStart.style.opacity = '0.6';
+  btnStart.style.cursor = 'not-allowed';
+  btnStart.textContent = '⏳ Enviando...';
+  
+  const sessao = getSessao();
+  const usuarioLogado = sessao?.usuario || 'Atendente';
+  
+  let enviados = 0;
+  let pulados = 0;
+  let erros = 0;
+  
+  for (let i = 0; i < protocolos.length; i++) {
+    const p = protocolos[i];
+    const statusDiv = document.getElementById(`batch-status-${i}`);
+    
+    // Update progress
+    const progresso = Math.round(((i + 1) / protocolos.length) * 100);
+    progressBar.style.width = `${progresso}%`;
+    progressText.textContent = `Processando ${i + 1} de ${protocolos.length}...`;
+    
+    // Check if already sent
+    if (p.whatsapp_enviado_em) {
+      pulados++;
+      if (statusDiv) {
+        statusDiv.style.background = '#e3f2fd';
+        statusDiv.style.color = '#1976d2';
+        statusDiv.textContent = `⏩ Pulado (já enviado em ${p.whatsapp_enviado_em})`;
+      }
+      continue;
+    }
+    
+    // Show sending status
+    if (statusDiv) {
+      statusDiv.style.background = '#fff3e0';
+      statusDiv.style.color = '#f57c00';
+      statusDiv.textContent = '📤 Enviando...';
+    }
+    
+    try {
+      // Prepare WhatsApp message
+      const nomeRequerente = p.nome_requerente;
+      const nomeParteAto = p.nome_parte_ato || nomeRequerente;
+      const numero = p.numero;
+      const status = p.status || 'Concluído';
+      const whatsappNumber = p.whatsapp;
+      
+      const mensagem = encodeURIComponent(
+        `Olá, Sr.(a) *${nomeRequerente}*\n\n` +
+        `O 📋 *Protocolo ${numero}*, em nome de: *${nomeParteAto}*, está com 📊 Status: ${status}.\n\n` +
+        `Para retirar seu pedido é preciso apresentar o *protocolo original*, caso tenha perdido apenas o requerente poderá retirar.\n\n` +
+        `Atenciosamente\n${usuarioLogado}`
+      );
+      
+      const whatsappUrl = `whatsapp://send?phone=${encodeURIComponent(whatsappNumber.replace(/\D/g, ''))}&text=${mensagem}`;
+      
+      // Open WhatsApp
+      window.open(whatsappUrl, '_blank');
+      
+      // Update protocol with send timestamp
+      const agora = new Date();
+      const dataFormatada = agora.toLocaleString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      });
+      
+      const respUpdate = await fetchWithAuth(`/api/protocolo/${p.id}`, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          whatsapp_enviado_em: dataFormatada,
+          whatsapp_enviado_por: usuarioLogado
+        })
+      });
+      
+      if (respUpdate.ok) {
+        enviados++;
+        if (statusDiv) {
+          statusDiv.style.background = '#c8e6c9';
+          statusDiv.style.color = '#2e7d32';
+          statusDiv.textContent = `✅ Enviado (${dataFormatada})`;
+        }
+      } else {
+        erros++;
+        if (statusDiv) {
+          statusDiv.style.background = '#ffcdd2';
+          statusDiv.style.color = '#c62828';
+          statusDiv.textContent = '❌ Erro ao registrar envio';
+        }
+      }
+      
+      // Delay between sends (2 seconds)
+      if (i < protocolos.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+      
+    } catch (error) {
+      console.error(`Erro ao enviar para protocolo ${p.numero}:`, error);
+      erros++;
+      if (statusDiv) {
+        statusDiv.style.background = '#ffcdd2';
+        statusDiv.style.color = '#c62828';
+        statusDiv.textContent = '❌ Erro ao enviar';
+      }
+    }
+  }
+  
+  // Final status
+  progressBar.style.width = '100%';
+  progressText.innerHTML = `
+    ✅ Concluído! 
+    <strong>${enviados}</strong> enviado(s), 
+    <strong>${pulados}</strong> pulado(s), 
+    <strong>${erros}</strong> erro(s)
+  `;
+  
+  btnStart.textContent = '✅ Envio Concluído';
+  btnStart.style.background = '#4caf50';
+  
+  mostrarMensagem(
+    `Envio em lote concluído!\n${enviados} enviado(s), ${pulados} pulado(s), ${erros} erro(s)`, 
+    enviados > 0 ? 'sucesso' : 'info'
+  );
+}
+
 
 
 function menuInicial() {
@@ -1225,6 +1486,24 @@ function menuInicial() {
                 style="background:#ff9800;color:white;border:none;padding:10px 16px;border-radius:6px;cursor:pointer;">
           📋 Ver Exigências e Pendentes
         </button>
+      </div>
+      
+      <!-- Seção de Envio em Lote WhatsApp -->
+      <div id="batch-whatsapp-section" style="background:#f8f9fa;padding:20px;border-radius:8px;margin-top:25px;border:1px solid #dee2e6;">
+        <h3 style="margin:0 0 15px 0;color:#333;">📱 Envio em Lote - Protocolos Finalizados</h3>
+        <div style="display:flex;gap:12px;align-items:end;flex-wrap:wrap;">
+          <div>
+            <label style="display:block;margin-bottom:4px;font-weight:500;">📅 Data:</label>
+            <input type="date" id="batch-whatsapp-date" 
+                   style="padding:8px 12px;border:1px solid #ced4da;border-radius:4px;font-size:14px;"
+                   value="${new Date().toISOString().split('T')[0]}">
+          </div>
+          <button onclick="verificarProtocolosFinalizados()" 
+                  style="background:#25d366;color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-weight:600;">
+            🔍 Verificar e Enviar WhatsApp
+          </button>
+        </div>
+        <div id="batch-whatsapp-results" style="margin-top:15px;"></div>
       </div>
     </div>
   `;
@@ -2874,11 +3153,28 @@ function montarFormularioEditar(p) {
     whatsappBtn.style.display = 'inline-block';
     
     // Set up WhatsApp button handler
-    whatsappBtn.onclick = function() {
+    whatsappBtn.onclick = async function() {
       // Validate required fields before sending
       if (!p.numero || !p.nome_requerente) {
         mostrarMensagem('Protocolo ou nome do requerente não está disponível.', 'erro');
         return;
+      }
+      
+      // Check if WhatsApp was already sent
+      if (p.whatsapp_enviado_em) {
+        const dataEnvio = p.whatsapp_enviado_em;
+        const usuarioEnvio = p.whatsapp_enviado_por || 'Usuário desconhecido';
+        
+        const confirmacao = confirm(
+          `⚠️ WhatsApp já enviado!\n\n` +
+          `📅 Data: ${dataEnvio}\n` +
+          `👤 Por: ${usuarioEnvio}\n\n` +
+          `Deseja enviar novamente?`
+        );
+        
+        if (!confirmacao) {
+          return; // User cancelled
+        }
       }
       
       const numero = p.numero;
@@ -2942,6 +3238,38 @@ function montarFormularioEditar(p) {
       
       // Use window.open to avoid navigating away from the current page
       window.open(whatsappUrl, '_blank');
+      
+      // Update protocol with send timestamp
+      try {
+        const agora = new Date();
+        const dataFormatada = agora.toLocaleString('pt-BR', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit'
+        });
+        
+        const respUpdate = await fetchWithAuth(`/api/protocolo/${p.id}`, {
+          method: 'PUT',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            whatsapp_enviado_em: dataFormatada,
+            whatsapp_enviado_por: usuarioLogado
+          })
+        });
+        
+        if (respUpdate.ok) {
+          // Update local protocol data
+          p.whatsapp_enviado_em = dataFormatada;
+          p.whatsapp_enviado_por = usuarioLogado;
+          mostrarMensagem('WhatsApp enviado e registrado com sucesso!', 'sucesso');
+        }
+      } catch (error) {
+        console.error('Erro ao registrar envio de WhatsApp:', error);
+        // Don't show error to user, as WhatsApp was sent successfully
+      }
     };
   }
   
