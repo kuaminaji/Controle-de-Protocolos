@@ -1572,8 +1572,9 @@ def protocolos_finalizados_por_data(data: str):
         
         # Buscar protocolos concluídos nesta data
         # Considera data de última alteração (quando mudou para Concluído)
+        # Usa regex case-insensitive para aceitar CONCLUIDO, Concluído, concluido, etc.
         filtro = {
-            "status": "Concluído",
+            "status": {"$regex": "^conclu[íi]do$", "$options": "i"},
             "ultima_alteracao_data": {"$exists": True, "$ne": ""}
         }
         
