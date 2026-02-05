@@ -1302,55 +1302,6 @@ def protocolos_exigencias_pendentes_post(
         saida.append(p_out)
     return saida
 
-@app.get("/api/protocolo/finalizados/{data}")
-def protocolos_finalizados_por_data(
-    data: str,
-    usuario_logado: str = Depends(obter_usuario_logado)
-):
-    """
-    Retorna protocolos com status 'Concluído' finalizados na data especificada.
-    Data no formato: YYYY-MM-DD
-    """
-    try:
-        # Parse data
-        from datetime import datetime, timedelta
-        data_obj = datetime.strptime(data, "%Y-%m-%d")
-        data_inicio = data_obj.replace(hour=0, minute=0, second=0, microsecond=0)
-        data_fim = data_obj.replace(hour=23, minute=59, second=59, microsecond=999999)
-        
-        # Buscar protocolos concluídos nesta data
-        # Considera data de última alteração (quando mudou para Concluído)
-        filtro = {
-            "status": "Concluído",
-            "ultima_alteracao_data": {"$exists": True, "$ne": ""}
-        }
-        
-        protos = list(protocolos_coll.find(filtro))
-        
-        # Filtrar por data no Python (já que ultima_alteracao_data é string)
-        data_str = data_obj.strftime("%d/%m/%Y")
-        protos_data = []
-        
-        for p in protos:
-            # Checar se a data de última alteração corresponde
-            if p.get("ultima_alteracao_data", "").startswith(data_str):
-                p_out = {k: v for k, v in p.items() if k not in [
-                    "_id", "data_criacao_dt", "data_retirada_dt", "historico_alteracoes",
-                    "exig1_data_retirada_dt","exig1_data_reapresentacao_dt",
-                    "exig2_data_retirada_dt","exig2_data_reapresentacao_dt",
-                    "exig3_data_retirada_dt","exig3_data_reapresentacao_dt"
-                ]}
-                p_out["id"] = str(p["_id"])
-                protos_data.append(p_out)
-        
-        return protos_data
-        
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=f"Formato de data inválido. Use YYYY-MM-DD. Erro: {str(e)}")
-    except Exception as e:
-        logger.error(f"Erro ao buscar protocolos finalizados: {str(e)}")
-        raise HTTPException(status_code=500, detail="Erro interno ao buscar protocolos")
-
 # ====================== [BLOCO 16: MIGRAÇÃO DE DADOS] ======================
 @app.post("/api/admin/migrar-datas")
 def migrar_datas_antigas(usuario: str = Body(...), senha: str = Body(...)):
@@ -1595,6 +1546,59 @@ def _serialize_doc(doc: Dict[str, Any]) -> Dict[str, Any]:
             continue
         out[k] = _serialize_value(v)
     return out
+
+# ====================== [FINALIZADOS ROUTE - Must be before /{id}] ======================
+@app.get("/api/protocolo/finalizados/{data}")
+def protocolos_finalizados_por_data(
+    data: str,
+    usuario_logado: str = Depends(obter_usuario_logado)
+):
+    """
+    Retorna protocolos com status 'Concluído' finalizados na data especificada.
+    Data no formato: YYYY-MM-DD
+    
+    IMPORTANTE: Esta rota deve vir ANTES de /api/protocolo/{id} para evitar
+    que FastAPI interprete 'finalizados' como um ID de protocolo.
+    """
+    try:
+        # Parse data
+        from datetime import datetime, timedelta
+        data_obj = datetime.strptime(data, "%Y-%m-%d")
+        data_inicio = data_obj.replace(hour=0, minute=0, second=0, microsecond=0)
+        data_fim = data_obj.replace(hour=23, minute=59, second=59, microsecond=999999)
+        
+        # Buscar protocolos concluídos nesta data
+        # Considera data de última alteração (quando mudou para Concluído)
+        filtro = {
+            "status": "Concluído",
+            "ultima_alteracao_data": {"$exists": True, "$ne": ""}
+        }
+        
+        protos = list(protocolos_coll.find(filtro))
+        
+        # Filtrar por data no Python (já que ultima_alteracao_data é string)
+        data_str = data_obj.strftime("%d/%m/%Y")
+        protos_data = []
+        
+        for p in protos:
+            # Checar se a data de última alteração corresponde
+            if p.get("ultima_alteracao_data", "").startswith(data_str):
+                p_out = {k: v for k, v in p.items() if k not in [
+                    "_id", "data_criacao_dt", "data_retirada_dt", "historico_alteracoes",
+                    "exig1_data_retirada_dt","exig1_data_reapresentacao_dt",
+                    "exig2_data_retirada_dt","exig2_data_reapresentacao_dt",
+                    "exig3_data_retirada_dt","exig3_data_reapresentacao_dt"
+                ]}
+                p_out["id"] = str(p["_id"])
+                protos_data.append(p_out)
+        
+        return protos_data
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Formato de data inválido. Use YYYY-MM-DD. Erro: {str(e)}")
+    except Exception as e:
+        logger.error(f"Erro ao buscar protocolos finalizados: {str(e)}")
+        raise HTTPException(status_code=500, detail="Erro interno ao buscar protocolos")
 
 @app.get("/api/protocolo/{id}", response_model=Optional[Dict[str, Any]])
 def get_protocolo_por_id(id: str):
