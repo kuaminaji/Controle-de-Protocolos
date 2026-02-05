@@ -109,6 +109,8 @@ class ProtocoloModel(BaseModel):
     ultima_alteracao_data: str = ""
     retirado_por: str = ""
     data_retirada: str = ""
+    whatsapp_enviado_em: str = Field(default="", max_length=30, description="Data/hora do último envio WhatsApp")
+    whatsapp_enviado_por: str = Field(default="", max_length=60, description="Usuário que enviou última mensagem WhatsApp")
     exig1_retirada_por: str = Field(default="", max_length=60)
     exig1_data_retirada: str = Field(default="", max_length=10)
     exig1_reapresentada_por: str = Field(default="", max_length=60)
@@ -1299,6 +1301,55 @@ def protocolos_exigencias_pendentes_post(
         p_out["id"] = str(p["_id"])
         saida.append(p_out)
     return saida
+
+@app.get("/api/protocolo/finalizados/{data}")
+def protocolos_finalizados_por_data(
+    data: str,
+    usuario_logado: str = Depends(obter_usuario_logado)
+):
+    """
+    Retorna protocolos com status 'Concluído' finalizados na data especificada.
+    Data no formato: YYYY-MM-DD
+    """
+    try:
+        # Parse data
+        from datetime import datetime, timedelta
+        data_obj = datetime.strptime(data, "%Y-%m-%d")
+        data_inicio = data_obj.replace(hour=0, minute=0, second=0, microsecond=0)
+        data_fim = data_obj.replace(hour=23, minute=59, second=59, microsecond=999999)
+        
+        # Buscar protocolos concluídos nesta data
+        # Considera data de última alteração (quando mudou para Concluído)
+        filtro = {
+            "status": "Concluído",
+            "ultima_alteracao_data": {"$exists": True, "$ne": ""}
+        }
+        
+        protos = list(protocolos_coll.find(filtro))
+        
+        # Filtrar por data no Python (já que ultima_alteracao_data é string)
+        data_str = data_obj.strftime("%d/%m/%Y")
+        protos_data = []
+        
+        for p in protos:
+            # Checar se a data de última alteração corresponde
+            if p.get("ultima_alteracao_data", "").startswith(data_str):
+                p_out = {k: v for k, v in p.items() if k not in [
+                    "_id", "data_criacao_dt", "data_retirada_dt", "historico_alteracoes",
+                    "exig1_data_retirada_dt","exig1_data_reapresentacao_dt",
+                    "exig2_data_retirada_dt","exig2_data_reapresentacao_dt",
+                    "exig3_data_retirada_dt","exig3_data_reapresentacao_dt"
+                ]}
+                p_out["id"] = str(p["_id"])
+                protos_data.append(p_out)
+        
+        return protos_data
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Formato de data inválido. Use YYYY-MM-DD. Erro: {str(e)}")
+    except Exception as e:
+        logger.error(f"Erro ao buscar protocolos finalizados: {str(e)}")
+        raise HTTPException(status_code=500, detail="Erro interno ao buscar protocolos")
 
 # ====================== [BLOCO 16: MIGRAÇÃO DE DADOS] ======================
 @app.post("/api/admin/migrar-datas")
