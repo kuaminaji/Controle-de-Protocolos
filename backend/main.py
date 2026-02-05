@@ -1555,10 +1555,7 @@ def _serialize_doc(doc: Dict[str, Any]) -> Dict[str, Any]:
 
 # ====================== [FINALIZADOS ROUTE - Must be before /{id}] ======================
 @app.get("/api/protocolo/finalizados/{data}")
-def protocolos_finalizados_por_data(
-    data: str,
-    usuario_logado: str = Depends(obter_usuario_logado)
-):
+def protocolos_finalizados_por_data(data: str):
     """
     Retorna protocolos com status 'Concluído' finalizados na data especificada.
     Data no formato: YYYY-MM-DD
