@@ -28,7 +28,7 @@ from bson.json_util import dumps as bson_dumps, loads as bson_loads
 from fastapi import FastAPI, HTTPException, Query, Body, Request, Depends, UploadFile, File, status
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field, validator, ValidationError
+from pydantic import BaseModel, Field, field_validator, ValidationError
 from pymongo import MongoClient, errors
 from pymongo.collection import Collection
 from pymongo import ASCENDING, DESCENDING
@@ -124,36 +124,41 @@ class ProtocoloModel(BaseModel):
     exig3_reapresentada_por: str = Field(default="", max_length=60)
     exig3_data_reapresentacao: str = Field(default="", max_length=10)
     
-    @validator('numero')
+    @field_validator('numero')
+    @classmethod
     def numero_valido(cls, v):
         if not v.isdigit() or not (5 <= len(v) <= 10):
             raise ValueError("Número do protocolo deve conter entre 5 e 10 dígitos.")
         return v
     
-    @validator('cpf')
-    def cpf_valido(cls, v, values):
+    @field_validator('cpf')
+    @classmethod
+    def cpf_valido(cls, v, info):
         # Allow empty CPF when sem_cpf flag is True
-        if values.get('sem_cpf', False) and not v:
+        if info.data.get('sem_cpf', False) and not v:
             return v
         if not validar_cpf(v):
             raise ValueError("CPF inválido. Informe um CPF válido.")
         return v
     
-    @validator('status')
+    @field_validator('status')
+    @classmethod
     def status_valido(cls, v):
         allowed = {"Pendente", "Em andamento", "Concluído", "Exigência", "EXCLUIDO"}
         if v not in allowed:
             raise ValueError("Status inválido.")
         return v
     
-    @validator('categoria')
+    @field_validator('categoria')
+    @classmethod
     def categoria_valida(cls, v):
         allowed = get_allowed_categorias()
         if v not in allowed:
             raise ValueError("Categoria inválida.")
         return v
     
-    @validator('data_criacao')
+    @field_validator('data_criacao')
+    @classmethod
     def data_criacao_valida(cls, v):
         try:
             data = datetime.strptime(v, "%Y-%m-%d").replace(tzinfo=timezone.utc)
@@ -173,7 +178,8 @@ class CategoriaModel(BaseModel):
     nome: str = Field(..., min_length=1, max_length=60)
     descricao: Optional[str] = Field(default="", max_length=240)
 
-    @validator('nome')
+    @field_validator('nome')
+    @classmethod
     def nome_strip(cls, v):
         v2 = v.strip()
         if not v2:
