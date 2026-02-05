@@ -1,5 +1,9 @@
 fastapi
 uvicorn
+pydantic
 pymongo
 dnspython
 python-dotenv
+passlib[bcrypt]
+python-jose[cryptography]
+python-multipart
