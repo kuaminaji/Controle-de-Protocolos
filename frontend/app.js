@@ -3271,6 +3271,27 @@ function montarFormularioEditar(p) {
         // Don't show error to user, as WhatsApp was sent successfully
       }
     };
+    
+    // Add WhatsApp send info display next to button
+    // Check if there's already a send info span and remove it
+    const existingInfo = document.getElementById('whatsapp-send-info');
+    if (existingInfo) {
+      existingInfo.remove();
+    }
+    
+    // If WhatsApp was sent before, display the info
+    if (p.whatsapp_enviado_em && p.whatsapp_enviado_por) {
+      const infoSpan = document.createElement('span');
+      infoSpan.id = 'whatsapp-send-info';
+      infoSpan.style.cssText = 'color:#666; font-size:0.9em; margin-left:15px; font-style:italic; display:inline-block;';
+      infoSpan.innerHTML = `
+        <span style="color:#25d366;">✅</span> 
+        Último envio: ${esc(p.whatsapp_enviado_em)} por ${esc(p.whatsapp_enviado_por)}
+      `;
+      
+      // Insert after WhatsApp button
+      whatsappBtn.parentNode.insertBefore(infoSpan, whatsappBtn.nextSibling);
+    }
   }
   
   // Verificar se há exigências preenchidas

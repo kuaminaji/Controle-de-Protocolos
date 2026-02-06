@@ -1120,6 +1120,25 @@ def editar_protocolo(id: str, protocolo: dict):
     if res.matched_count == 1:
         logger.info(f"Protocolo {prot.get('numero', '')} editado")
         
+        # Se WhatsApp foi enviado, adicionar ao histórico
+        if "whatsapp_enviado_em" in atualizacao and atualizacao.get("whatsapp_enviado_em"):
+            whatsapp_numero = atualizacao.get("whatsapp") or prot.get("whatsapp", "N/A")
+            usuario_envio = atualizacao.get("whatsapp_enviado_por", "Sistema")
+            data_envio = atualizacao.get("whatsapp_enviado_em")
+            
+            # Adicionar entrada no histórico
+            historico_entry = {
+                "data": data_envio,
+                "usuario": usuario_envio,
+                "acao": f"WhatsApp enviado para {whatsapp_numero}"
+            }
+            
+            protocolos_coll.update_one(
+                {"_id": oid},
+                {"$push": {"historico": historico_entry}}
+            )
+            logger.info(f"Envio WhatsApp registrado no histórico do protocolo {prot.get('numero', '')}")
+        
         # Update nome_requerente and whatsapp in all other protocols with the same CPF
         # Only sync if CPF is present and sem_cpf is False
         cpf_atualizado = atualizacao.get("cpf") or prot.get("cpf")
@@ -1570,23 +1589,39 @@ def protocolos_finalizados_por_data(data: str):
         data_inicio = data_obj.replace(hour=0, minute=0, second=0, microsecond=0)
         data_fim = data_obj.replace(hour=23, minute=59, second=59, microsecond=999999)
         
-        # Buscar protocolos concluídos nesta data
-        # Considera data de última alteração (quando mudou para Concluído)
+        # Buscar TODOS os protocolos concluídos
         # Usa regex case-insensitive para aceitar CONCLUIDO, Concluído, concluido, etc.
         filtro = {
-            "status": {"$regex": "^conclu[íi]do$", "$options": "i"},
-            "ultima_alteracao_data": {"$exists": True, "$ne": ""}
+            "status": {"$regex": "^conclu[íi]do$", "$options": "i"}
         }
         
         protos = list(protocolos_coll.find(filtro))
         
-        # Filtrar por data no Python (já que ultima_alteracao_data é string)
+        # Filtrar por data no Python
         data_str = data_obj.strftime("%d/%m/%Y")
         protos_data = []
         
         for p in protos:
-            # Checar se a data de última alteração corresponde
-            if p.get("ultima_alteracao_data", "").startswith(data_str):
+            # Checar última modificação no histórico OU data de criação
+            incluir = False
+            
+            # Opção 1: Verificar histórico de alterações
+            if p.get("historico"):
+                for h in p["historico"]:
+                    if isinstance(h, dict) and h.get("data", "").startswith(data_str):
+                        if "status" in h.get("acao", "").lower() or "conclu" in h.get("acao", "").lower():
+                            incluir = True
+                            break
+            
+            # Opção 2: Verificar campo ultima_alteracao_data
+            if not incluir and p.get("ultima_alteracao_data", "").startswith(data_str):
+                incluir = True
+            
+            # Opção 3: Verificar data_criacao (se foi criado hoje como concluído)
+            if not incluir and p.get("data_criacao", "").startswith(data_str):
+                incluir = True
+            
+            if incluir:
                 p_out = {k: v for k, v in p.items() if k not in [
                     "_id", "data_criacao_dt", "data_retirada_dt", "historico_alteracoes",
                     "exig1_data_retirada_dt","exig1_data_reapresentacao_dt",
