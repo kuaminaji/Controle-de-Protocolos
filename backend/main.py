@@ -282,6 +282,10 @@ def inicializa_admin():
 def now_str():
     return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
+def is_status_concluido(status: str) -> bool:
+    """Check if status is 'concluído' (case-insensitive)"""
+    return (status or "").strip().lower() in {"concluído", "concluido"}
+
 # ====================== [BLOCO 7: INICIALIZAÇÃO] ======================
 create_indexes()
 inicializa_admin()
@@ -733,7 +737,7 @@ def incluir_protocolo(protocolo: ProtocoloModel):
         novo.pop(f"exig{i}_data_reapresentacao_dt", None)
     
     # Set data_concluido if protocol is created with status "Concluído"
-    if status == "Concluído":
+    if is_status_concluido(status):
         novo["data_concluido"] = novo["ultima_alteracao_data"]
         novo["data_concluido_dt"] = datetime.now(timezone.utc)
     else:
@@ -1118,12 +1122,14 @@ def editar_protocolo(id: str, protocolo: dict):
         process_exigencia(i)
     
     # Check if status changed to "Concluído"
-    old_status = prot.get("status", "")
-    new_status = atualizacao.get("status", old_status)
-    if new_status == "Concluído" and old_status != "Concluído":
+    old_status_concluido = is_status_concluido(prot.get("status", ""))
+    new_status_raw = atualizacao.get("status", prot.get("status", ""))
+    new_status_concluido = is_status_concluido(new_status_raw)
+    
+    if new_status_concluido and not old_status_concluido:
         atualizacao["data_concluido"] = now_str()
         atualizacao["data_concluido_dt"] = datetime.now(timezone.utc)
-    elif new_status != "Concluído" and "status" in atualizacao:
+    elif not new_status_concluido and "status" in atualizacao and old_status_concluido:
         # If status is changed away from "Concluído", clear the data_concluido
         atualizacao["data_concluido"] = ""
         unset_fields["data_concluido_dt"] = ""
@@ -1268,8 +1274,9 @@ def excluir_protocolo_definitivamente(id: str, body: dict = Body(...)):
     }
     
     try:
-        # Insert audit trail
-        protocolos_excluidos_coll.insert_one(audit_data)
+        # Insert audit trail first
+        audit_result = protocolos_excluidos_coll.insert_one(audit_data)
+        audit_id = str(audit_result.inserted_id)
         logger.info(f"Audit trail criado para protocolo {prot.get('numero', '')} excluído definitivamente")
         
         # Delete from main collection
@@ -1280,11 +1287,16 @@ def excluir_protocolo_definitivamente(id: str, body: dict = Body(...)):
             return {
                 "ok": True,
                 "message": "Protocolo excluído definitivamente com sucesso. Registro de auditoria criado.",
-                "audit_id": str(audit_data.get("_id"))
+                "audit_id": audit_id
             }
         else:
+            # Rollback: Remove audit trail if deletion failed
+            protocolos_excluidos_coll.delete_one({"_id": audit_result.inserted_id})
+            logger.warning(f"Exclusão falhou, audit trail removido para protocolo {prot.get('numero', '')}")
             raise HTTPException(status_code=404, detail="Protocolo não encontrado para exclusão.")
             
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Erro ao excluir definitivamente protocolo: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Erro ao excluir protocolo: {str(e)}")

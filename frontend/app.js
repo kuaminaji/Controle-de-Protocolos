@@ -1974,7 +1974,7 @@ function navegar(pagina) {
             <div style="flex:1;min-width:180px;">
               <label>Número do Protocolo *</label>
               <input type="text" id="numero-protocolo" name="numero" maxlength="5" minlength="5" required 
-                     inputmode="numeric" pattern="^\\d{5}$" style="width:100%;" 
+                     inputmode="numeric" pattern="^[0-9]{5}$" style="width:100%;" 
                      placeholder="00000">
               <div id="protocolo-feedback" class="campo-feedback hint"></div>
             </div>
@@ -2317,7 +2317,7 @@ function navegar(pagina) {
             <div style="width:220px;">
               <label>Número do Protocolo</label>
               <input type="text" id="buscar-numero" maxlength="5" minlength="5" autocomplete="off" 
-                     inputmode="numeric" pattern="^\\d{5}$" placeholder="00000" style="width:100%;">
+                     inputmode="numeric" pattern="^[0-9]{5}$" placeholder="00000" style="width:100%;">
             </div>
             <div style="width:200px;">
               <label>CPF do Requerente</label>
@@ -2497,7 +2497,7 @@ function navegar(pagina) {
           <div style="display:flex;gap:12px;flex-wrap:wrap;">
             <div style="width:260px;">
               <label>Número do Protocolo</label>
-              <input type="text" id="editar-numero" maxlength="5" minlength="5" inputmode="numeric" pattern="^\\d{5}$" placeholder="00000" style="width:100%;">
+              <input type="text" id="editar-numero" maxlength="5" minlength="5" inputmode="numeric" pattern="^[0-9]{5}$" placeholder="00000" style="width:100%;">
             </div>
             <div style="width:260px;">
               <label>CPF do Requerente</label>
@@ -3251,7 +3251,7 @@ function montarFormularioEditar(p) {
         <div style="flex:1;min-width:180px;">
           <label>Número do Protocolo *</label>
           <input type="text" id="editar-numero-protocolo" name="numero" value="${esc(p.numero)}" 
-                 maxlength="5" minlength="5" pattern="^\\d{5}$" required 
+                 maxlength="5" minlength="5" pattern="^[0-9]{5}$" required 
                  ${isAdmin ? '' : 'readonly'} style="width:100%;">
           <div id="editar-numero-protocolo-feedback" class="campo-feedback"></div>
         </div>
