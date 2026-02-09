@@ -8,6 +8,7 @@ import hashlib
 import hmac
 import logging
 import asyncio
+import csv
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any, Tuple
 from contextlib import asynccontextmanager
@@ -1300,6 +1301,190 @@ def excluir_protocolo_definitivamente(id: str, body: dict = Body(...)):
     except Exception as e:
         logger.error(f"Erro ao excluir definitivamente protocolo: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Erro ao excluir protocolo: {str(e)}")
+
+@app.get("/api/auditoria/exclusoes")
+def consultar_auditoria_exclusoes(
+    data_inicio: Optional[str] = Query(default=None, description="Data inicial (YYYY-MM-DD)"),
+    data_fim: Optional[str] = Query(default=None, description="Data final (YYYY-MM-DD)"),
+    admin: Optional[str] = Query(default=None, description="Admin responsável"),
+    numero_protocolo: Optional[str] = Query(default=None, description="Número do protocolo"),
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=50, ge=1, le=100)
+):
+    """
+    Query deleted protocols audit trail with filters.
+    Only accessible by admin users.
+    """
+    try:
+        filtro = {}
+        
+        # Filter by date range
+        if data_inicio or data_fim:
+            date_filter = {}
+            if data_inicio:
+                try:
+                    dt_inicio = datetime.strptime(data_inicio, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+                    date_filter["$gte"] = dt_inicio
+                except ValueError:
+                    raise HTTPException(status_code=400, detail="Data inicial inválida. Use YYYY-MM-DD.")
+            if data_fim:
+                try:
+                    # Include the entire end day
+                    dt_fim = datetime.strptime(data_fim, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=timezone.utc)
+                    date_filter["$lte"] = dt_fim
+                except ValueError:
+                    raise HTTPException(status_code=400, detail="Data final inválida. Use YYYY-MM-DD.")
+            if date_filter:
+                filtro["exclusao_timestamp_dt"] = date_filter
+        
+        # Filter by admin
+        if admin:
+            filtro["admin_responsavel"] = admin
+        
+        # Filter by protocol number
+        if numero_protocolo:
+            filtro["numero"] = apenas_digitos(numero_protocolo)
+        
+        # Count total
+        total = protocolos_excluidos_coll.count_documents(filtro)
+        
+        # Paginate
+        skip = (page - 1) * per_page
+        registros = list(
+            protocolos_excluidos_coll.find(filtro)
+            .sort("exclusao_timestamp_dt", DESCENDING)
+            .skip(skip)
+            .limit(per_page)
+        )
+        
+        # Format output
+        saida = []
+        for r in registros:
+            r_out = {
+                "id": str(r["_id"]),
+                "protocolo_id_original": r.get("protocolo_id_original", ""),
+                "numero": r.get("numero", ""),
+                "nome_requerente": r.get("nome_requerente", ""),
+                "cpf": r.get("cpf", ""),
+                "categoria": r.get("protocolo_original", {}).get("categoria", ""),
+                "status_original": r.get("protocolo_original", {}).get("status", ""),
+                "exclusao_timestamp": r.get("exclusao_timestamp", ""),
+                "admin_responsavel": r.get("admin_responsavel", ""),
+                "motivo": r.get("motivo", ""),
+                # Include some key protocol fields for reference
+                "data_criacao": r.get("protocolo_original", {}).get("data_criacao", ""),
+                "responsavel": r.get("protocolo_original", {}).get("responsavel", ""),
+            }
+            saida.append(r_out)
+        
+        return {
+            "registros": saida,
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+            "total_pages": (total + per_page - 1) // per_page
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erro ao consultar auditoria de exclusões: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erro ao consultar auditoria: {str(e)}")
+
+@app.get("/api/auditoria/exclusoes/export")
+def exportar_auditoria_exclusoes_csv(
+    data_inicio: Optional[str] = Query(default=None),
+    data_fim: Optional[str] = Query(default=None),
+    admin: Optional[str] = Query(default=None),
+    numero_protocolo: Optional[str] = Query(default=None)
+):
+    """
+    Export deleted protocols audit trail to CSV.
+    Only accessible by admin users.
+    """
+    try:
+        filtro = {}
+        
+        # Filter by date range
+        if data_inicio or data_fim:
+            date_filter = {}
+            if data_inicio:
+                try:
+                    dt_inicio = datetime.strptime(data_inicio, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+                    date_filter["$gte"] = dt_inicio
+                except ValueError:
+                    raise HTTPException(status_code=400, detail="Data inicial inválida. Use YYYY-MM-DD.")
+            if data_fim:
+                try:
+                    dt_fim = datetime.strptime(data_fim, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=timezone.utc)
+                    date_filter["$lte"] = dt_fim
+                except ValueError:
+                    raise HTTPException(status_code=400, detail="Data final inválida. Use YYYY-MM-DD.")
+            if date_filter:
+                filtro["exclusao_timestamp_dt"] = date_filter
+        
+        # Filter by admin
+        if admin:
+            filtro["admin_responsavel"] = admin
+        
+        # Filter by protocol number
+        if numero_protocolo:
+            filtro["numero"] = apenas_digitos(numero_protocolo)
+        
+        # Get all matching records
+        registros = list(
+            protocolos_excluidos_coll.find(filtro)
+            .sort("exclusao_timestamp_dt", DESCENDING)
+        )
+        
+        # Generate CSV
+        output = io.StringIO()
+        writer = None
+        
+        for r in registros:
+            prot_orig = r.get("protocolo_original", {})
+            row = {
+                "Número": r.get("numero", ""),
+                "Nome Requerente": r.get("nome_requerente", ""),
+                "CPF": r.get("cpf", ""),
+                "Categoria": prot_orig.get("categoria", ""),
+                "Status Original": prot_orig.get("status", ""),
+                "Data Criação": prot_orig.get("data_criacao", ""),
+                "Responsável Protocolo": prot_orig.get("responsavel", ""),
+                "Título": prot_orig.get("titulo", ""),
+                "Data Exclusão": r.get("exclusao_timestamp", ""),
+                "Admin Responsável": r.get("admin_responsavel", ""),
+                "Motivo": r.get("motivo", ""),
+                "Observações": prot_orig.get("observacoes", ""),
+            }
+            
+            if writer is None:
+                writer = csv.DictWriter(output, fieldnames=row.keys())
+                writer.writeheader()
+            
+            writer.writerow(row)
+        
+        # Return CSV
+        csv_content = output.getvalue()
+        output.close()
+        
+        if not csv_content:
+            csv_content = "Número,Nome Requerente,CPF,Categoria,Status Original,Data Criação,Responsável Protocolo,Título,Data Exclusão,Admin Responsável,Motivo,Observações\n"
+        
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        filename = f"auditoria_exclusoes_{timestamp}.csv"
+        
+        return StreamingResponse(
+            io.BytesIO(csv_content.encode('utf-8-sig')),  # UTF-8 with BOM for Excel
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erro ao exportar auditoria: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erro ao exportar: {str(e)}")
 
 
 # ====================== [BLOCO 15: ATENÇÃO / AUTOPREENCHIMENTO] ======================
