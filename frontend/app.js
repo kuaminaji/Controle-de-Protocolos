@@ -5059,15 +5059,15 @@ async function exibirAuditoriaExclusoes() {
 
 async function carregarListaAdmins() {
   try {
-    const resp = await fetchWithAuth('/api/usuarios/nomes');
+    const resp = await fetchWithAuth('/api/usuarios/admins');
     if (resp.ok) {
-      const usuarios = await resp.json();
+      const admins = await resp.json();
       const selectAdmin = document.getElementById("filtro-admin");
       if (selectAdmin) {
-        usuarios.forEach(u => {
+        admins.forEach(a => {
           const option = document.createElement("option");
-          option.value = u.usuario;
-          option.textContent = u.usuario;
+          option.value = a.usuario;
+          option.textContent = a.usuario;
           selectAdmin.appendChild(option);
         });
       }

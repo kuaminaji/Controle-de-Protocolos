@@ -535,6 +535,22 @@ def listar_usuarios_nomes():
         logger.error(f"Erro ao listar nomes de usuários: {e}")
         raise HTTPException(status_code=500, detail="Erro ao listar usuários")
 
+@app.get("/api/usuarios/admins")
+def listar_admins():
+    """
+    Endpoint to list only admin users.
+    Used for filtering audit trail by admin responsible.
+    """
+    try:
+        admins = list(usuarios_coll.find(
+            {"tipo": "admin", "bloqueado": {"$ne": True}},
+            {"usuario": 1, "_id": 0}
+        ).sort("usuario", ASCENDING))
+        return admins
+    except Exception as e:
+        logger.error(f"Erro ao listar admins: {e}")
+        raise HTTPException(status_code=500, detail="Erro ao listar admins")
+
 @app.post("/api/usuario")
 def cadastrar_usuario(usuario: UsuarioModel):
     if usuarios_coll.find_one({"usuario": usuario.usuario}):
@@ -1431,54 +1447,62 @@ def exportar_auditoria_exclusoes_csv(
         if numero_protocolo:
             filtro["numero"] = apenas_digitos(numero_protocolo)
         
-        # Get all matching records
-        registros = list(
-            protocolos_excluidos_coll.find(filtro)
-            .sort("exclusao_timestamp_dt", DESCENDING)
-        )
+        # Define CSV fieldnames upfront for consistent structure
+        fieldnames = [
+            "Número", "Nome Requerente", "CPF", "Categoria", "Status Original",
+            "Data Criação", "Responsável Protocolo", "Título", "Data Exclusão",
+            "Admin Responsável", "Motivo", "Observações"
+        ]
         
-        # Generate CSV
-        output = io.StringIO()
-        writer = None
-        
-        for r in registros:
-            prot_orig = r.get("protocolo_original", {})
-            row = {
-                "Número": r.get("numero", ""),
-                "Nome Requerente": r.get("nome_requerente", ""),
-                "CPF": r.get("cpf", ""),
-                "Categoria": prot_orig.get("categoria", ""),
-                "Status Original": prot_orig.get("status", ""),
-                "Data Criação": prot_orig.get("data_criacao", ""),
-                "Responsável Protocolo": prot_orig.get("responsavel", ""),
-                "Título": prot_orig.get("titulo", ""),
-                "Data Exclusão": r.get("exclusao_timestamp", ""),
-                "Admin Responsável": r.get("admin_responsavel", ""),
-                "Motivo": r.get("motivo", ""),
-                "Observações": prot_orig.get("observacoes", ""),
-            }
+        # Generator function for streaming CSV
+        def generate_csv():
+            output = io.StringIO()
+            writer = csv.DictWriter(output, fieldnames=fieldnames)
             
-            if writer is None:
-                writer = csv.DictWriter(output, fieldnames=row.keys())
-                writer.writeheader()
+            # Write header
+            writer.writeheader()
+            yield output.getvalue()
+            output.truncate(0)
+            output.seek(0)
             
-            writer.writerow(row)
-        
-        # Return CSV
-        csv_content = output.getvalue()
-        output.close()
-        
-        if not csv_content:
-            csv_content = "Número,Nome Requerente,CPF,Categoria,Status Original,Data Criação,Responsável Protocolo,Título,Data Exclusão,Admin Responsável,Motivo,Observações\n"
+            # Stream records
+            cursor = protocolos_excluidos_coll.find(filtro).sort("exclusao_timestamp_dt", DESCENDING)
+            
+            for r in cursor:
+                prot_orig = r.get("protocolo_original", {})
+                row = {
+                    "Número": r.get("numero", ""),
+                    "Nome Requerente": r.get("nome_requerente", ""),
+                    "CPF": r.get("cpf", ""),
+                    "Categoria": prot_orig.get("categoria", ""),
+                    "Status Original": prot_orig.get("status", ""),
+                    "Data Criação": prot_orig.get("data_criacao", ""),
+                    "Responsável Protocolo": prot_orig.get("responsavel", ""),
+                    "Título": prot_orig.get("titulo", ""),
+                    "Data Exclusão": r.get("exclusao_timestamp", ""),
+                    "Admin Responsável": r.get("admin_responsavel", ""),
+                    "Motivo": r.get("motivo", ""),
+                    "Observações": prot_orig.get("observacoes", ""),
+                }
+                
+                writer.writerow(row)
+                yield output.getvalue()
+                output.truncate(0)
+                output.seek(0)
+            
+            output.close()
         
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         filename = f"auditoria_exclusoes_{timestamp}.csv"
         
-        return StreamingResponse(
-            io.BytesIO(csv_content.encode('utf-8-sig')),  # UTF-8 with BOM for Excel
+        # Create response with generator for memory efficiency
+        response = StreamingResponse(
+            (chunk.encode('utf-8-sig') if i == 0 else chunk.encode('utf-8') for i, chunk in enumerate(generate_csv())),
             media_type="text/csv",
             headers={"Content-Disposition": f"attachment; filename={filename}"}
         )
+        
+        return response
         
     except HTTPException:
         raise
