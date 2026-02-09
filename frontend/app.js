@@ -1117,7 +1117,19 @@ function mostrarBoasVindas() {
   const sessao = getSessao();
   if (!sessao) return;
   
+  // Check if welcome screen was already shown today
   const hoje = new Date();
+  const dataHoje = hoje.toISOString().slice(0, 10); // YYYY-MM-DD format
+  const ultimaExibicao = localStorage.getItem('ultima_exibicao_boas_vindas');
+  
+  // If already shown today, don't show again
+  if (ultimaExibicao === dataHoje) {
+    return;
+  }
+  
+  // Mark as shown today
+  localStorage.setItem('ultima_exibicao_boas_vindas', dataHoje);
+  
   const dataFormatada = hoje.toLocaleDateString('pt-BR');
   
   const modalHTML = `
@@ -1193,7 +1205,204 @@ async function verificarAtrasos() {
   }
 }
 
+let batchProtocolosCache = [];
 
+// Function to verify and send WhatsApp to finished protocols
+async function verificarProtocolosFinalizados() {
+  const dateInput = document.getElementById('batch-whatsapp-date');
+  const resultsDiv = document.getElementById('batch-whatsapp-results');
+  
+  if (!dateInput || !resultsDiv) {
+    mostrarMensagem('Erro: elementos não encontrados', 'erro');
+    return;
+  }
+  
+  const data = dateInput.value;
+  if (!data) {
+    mostrarMensagem('Por favor, selecione uma data', 'erro');
+    return;
+  }
+  
+  // Show loading
+  resultsDiv.innerHTML = `
+    <div style="text-align:center;padding:20px;">
+      <div class="loader" style="width:30px;height:30px;margin:0 auto 10px;"></div>
+      <p>Buscando protocolos finalizados...</p>
+    </div>
+  `;
+  
+  try {
+    // Fetch finished protocols for the date
+    const resp = await fetchWithAuth(`/api/protocolo/finalizados/${data}`);
+    
+    if (!resp.ok) {
+      const erro = await resp.json().catch(() => ({}));
+      resultsDiv.innerHTML = `
+        <div style="color:#dc3545;text-align:center;padding:20px;">
+          ❌ ${erro.detail || 'Erro ao buscar protocolos'}
+        </div>
+      `;
+      return;
+    }
+    
+    const protocolos = await resp.json();
+    
+    if (!protocolos || protocolos.length === 0) {
+      resultsDiv.innerHTML = `
+        <div style="text-align:center;padding:20px;color:#666;">
+          ℹ️ Nenhum protocolo finalizado encontrado para esta data.
+        </div>
+      `;
+      return;
+    }
+    
+    // Filter only protocols with WhatsApp
+    const comWhatsapp = protocolos.filter(p => p.whatsapp && p.whatsapp.trim());
+    
+    if (comWhatsapp.length === 0) {
+      resultsDiv.innerHTML = `
+        <div style="text-align:center;padding:20px;color:#666;">
+          ℹ️ Encontrados ${protocolos.length} protocolo(s), mas nenhum tem WhatsApp cadastrado.
+        </div>
+      `;
+      return;
+    }
+    
+    // Show list of protocols
+    let html = `
+      <div style="background:white;padding:15px;border-radius:6px;border:1px solid #dee2e6;">
+        <h4 style="margin:0 0 15px 0;">📋 Protocolos Encontrados: ${comWhatsapp.length}</h4>
+        <div id="batch-protocol-list">
+    `;
+    
+    comWhatsapp.forEach((p, index) => {
+      const jaEnviado = p.whatsapp_enviado_em;
+      const statusClass = jaEnviado ? 'ja-enviado' : 'aguardando';
+      const statusText = jaEnviado 
+        ? `✅ Já enviado (${p.whatsapp_enviado_em})` 
+        : '⏳ Aguardando';
+      
+      html += `
+        <div id="batch-item-${index}" style="padding:10px;margin-bottom:8px;border:1px solid #e0e0e0;border-radius:4px;background:#fafafa;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div>
+              <strong>Protocolo ${esc(p.numero)}</strong> - ${esc(p.nome_requerente)}
+              <br>
+              <small style="color:#666;">📱 WhatsApp: ${esc(p.whatsapp)}</small>
+            </div>
+            <div id="batch-status-${index}" style="padding:4px 12px;border-radius:4px;font-size:13px;font-weight:600;">
+              ${statusText}
+            </div>
+          </div>
+        </div>
+      `;
+    });
+    
+    html += `
+        </div>
+        <div style="margin-top:15px;display:flex;justify-content:space-between;align-items:center;">
+          <div id="batch-progress" style="flex:1;margin-right:15px;">
+            <div style="background:#e0e0e0;height:8px;border-radius:4px;overflow:hidden;">
+              <div id="batch-progress-bar" style="width:0%;height:100%;background:#25d366;transition:width 0.3s;"></div>
+            </div>
+            <small id="batch-progress-text" style="color:#666;margin-top:4px;display:block;">Pronto para iniciar</small>
+          </div>
+          <button id="btn-start-batch"  
+                  style="background:#25d366;color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-weight:600;">
+            🚀 Iniciar Envio
+          </button>
+        </div>
+      </div>
+    `;
+    
+    resultsDiv.innerHTML = html;
+    batchProtocolosCache = comWhatsapp;
+    const btnStartBatch = document.getElementById('btn-start-batch');
+    if (btnStartBatch) btnStartBatch.onclick = () => iniciarEnvioEmLote(batchProtocolosCache);
+
+  } catch (error) {
+    console.error('Erro ao verificar protocolos:', error);
+    resultsDiv.innerHTML = `
+      <div style="color:#dc3545;text-align:center;padding:20px;">
+        ❌ Falha ao conectar ao servidor
+      </div>
+    `;
+  }
+}
+
+// Function to start batch sending
+async function iniciarEnvioEmLote(protocolos) {
+  const btnStart = document.getElementById('btn-start-batch');
+  const progressBar = document.getElementById('batch-progress-bar');
+  const progressText = document.getElementById('batch-progress-text');
+
+  if (!btnStart || !progressBar || !progressText) return mostrarMensagem('Erro: elementos não encontrados', 'erro');
+  if (!Array.isArray(protocolos) || protocolos.length === 0) return mostrarMensagem('Nenhum protocolo para envio.', 'info');
+
+  btnStart.disabled = true;
+  btnStart.style.opacity = '0.6';
+  btnStart.style.cursor = 'not-allowed';
+  btnStart.textContent = '⏳ Aguardando confirmações...';
+
+  const sessao = getSessao();
+  const usuarioLogado = sessao?.usuario || 'Atendente';
+
+  let enviados = 0, pulados = 0, erros = 0;
+
+  for (let i = 0; i < protocolos.length; i++) {
+    const p = protocolos[i];
+    const statusDiv = document.getElementById(`batch-status-${i}`);
+    progressBar.style.width = `${Math.round((i / protocolos.length) * 100)}%`;
+    progressText.textContent = `Aguardando confirmação ${i + 1} de ${protocolos.length}...`;
+
+    if (p.whatsapp_enviado_em) {
+      pulados++;
+      if (statusDiv) { statusDiv.style.background = '#e3f2fd'; statusDiv.style.color = '#1976d2'; statusDiv.textContent = `⏩ Pulado (já enviado em ${p.whatsapp_enviado_em})`; }
+      continue;
+    }
+
+    const ok = confirm(`Enviar WhatsApp agora?\n\nProtocolo: ${p.numero}\nCliente: ${p.nome_requerente || '-'}\nWhatsApp: ${p.whatsapp || '-'}`);
+    if (!ok) {
+      progressText.textContent = `⏸️ Envio pausado no item ${i + 1}/${protocolos.length}.`;
+      btnStart.disabled = false; btnStart.style.opacity = '1'; btnStart.style.cursor = 'pointer'; btnStart.textContent = '▶️ Continuar Envio';
+      btnStart.onclick = () => iniciarEnvioEmLote(protocolos.slice(i));
+      return;
+    }
+
+    if (statusDiv) { statusDiv.style.background = '#fff3e0'; statusDiv.style.color = '#f57c00'; statusDiv.textContent = '📤 Enviando...'; }
+
+    try {
+      const nomeRequerente = p.nome_requerente;
+      const nomeParteAto = p.nome_parte_ato || nomeRequerente;
+      const numero = p.numero;
+      const status = p.status || 'Concluído';
+      const raw = String(p.whatsapp || '').replace(/\D/g, '');
+      const telFinal = (raw.length === 10 || raw.length === 11) ? `55${raw}` : raw;
+      const mensagem = encodeURIComponent(`Olá, Sr.(a) *${nomeRequerente}*\n\nO 📋 *Protocolo ${numero}*, em nome de: *${nomeParteAto}*, está com 📊 Status: ${status}.\n\nPara retirar seu pedido é preciso apresentar o *protocolo original*, caso tenha perdido apenas o requerente poderá retirar.\n\nAtenciosamente\n${usuarioLogado}`);
+      window.location.href = `whatsapp://send?phone=${telFinal}&text=${mensagem}`;
+
+      const agora = new Date();
+      const dataFormatada = agora.toLocaleString('pt-BR', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'});
+      const respUpdate = await fetchWithAuth(`/api/protocolo/${p.id}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({whatsapp_enviado_em:dataFormatada, whatsapp_enviado_por:usuarioLogado})});
+
+      if (respUpdate.ok) {
+        enviados++;
+        if (statusDiv) { statusDiv.style.background='#c8e6c9'; statusDiv.style.color='#2e7d32'; statusDiv.textContent=`✅ Enviado (${dataFormatada})`; }
+      } else {
+        erros++;
+        if (statusDiv) { statusDiv.style.background='#ffcdd2'; statusDiv.style.color='#c62828'; statusDiv.textContent='❌ Erro ao registrar envio'; }
+      }
+    } catch (error) {
+      erros++;
+      if (statusDiv) { statusDiv.style.background='#ffcdd2'; statusDiv.style.color='#c62828'; statusDiv.textContent='❌ Erro ao enviar'; }
+    }
+  }
+
+  progressBar.style.width = '100%';
+  progressText.innerHTML = `✅ Concluído! <strong>${enviados}</strong> enviado(s), <strong>${pulados}</strong> pulado(s), <strong>${erros}</strong> erro(s)`;
+  btnStart.textContent = '✅ Envio Concluído'; btnStart.style.background = '#4caf50'; btnStart.disabled = true;
+  mostrarMensagem(`Envio em lote concluído! ${enviados} enviado(s), ${pulados} pulado(s), ${erros} erro(s)`, enviados > 0 ? 'sucesso' : 'info');
+}
 
 function menuInicial() {
   let conteudo = document.getElementById("conteudo");
@@ -1213,6 +1422,24 @@ function menuInicial() {
                 style="background:#ff9800;color:white;border:none;padding:10px 16px;border-radius:6px;cursor:pointer;">
           📋 Ver Exigências e Pendentes
         </button>
+      </div>
+      
+      <!-- Seção de Envio em Lote WhatsApp -->
+      <div id="batch-whatsapp-section" style="background:#f8f9fa;padding:20px;border-radius:8px;margin-top:25px;border:1px solid #dee2e6;">
+        <h3 style="margin:0 0 15px 0;color:#333;">📱 Envio em Lote - Protocolos Finalizados</h3>
+        <div style="display:flex;gap:12px;align-items:end;flex-wrap:wrap;">
+          <div>
+            <label style="display:block;margin-bottom:4px;font-weight:500;">📅 Data:</label>
+            <input type="date" id="batch-whatsapp-date" 
+                   style="padding:8px 12px;border:1px solid #ced4da;border-radius:4px;font-size:14px;"
+                   value="${new Date().toISOString().split('T')[0]}">
+          </div>
+          <button onclick="verificarProtocolosFinalizados()" 
+                  style="background:#25d366;color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-weight:600;">
+            🔍 Verificar e Enviar WhatsApp
+          </button>
+        </div>
+        <div id="batch-whatsapp-results" style="margin-top:15px;"></div>
       </div>
     </div>
   `;
@@ -1742,66 +1969,76 @@ function navegar(pagina) {
     conteudo.innerHTML = `
       <div class="form-destacado">
         <h2>Incluir Protocolo</h2>
-        <form id="form-protocolo" autocomplete="off" style="max-width:1000px;">
+        <form id="form-protocolo" autocomplete="off" style="max-width:1200px;">
           <div style="display:flex;gap:12px;flex-wrap:wrap;">
-            <div style="flex:1;min-width:200px;">
+            <div style="flex:1;min-width:180px;">
               <label>Número do Protocolo *</label>
               <input type="text" id="numero-protocolo" name="numero" maxlength="5" minlength="5" required 
                      inputmode="numeric" pattern="^\\d{5}$" style="width:100%;" 
                      placeholder="00000">
               <div id="protocolo-feedback" class="campo-feedback hint"></div>
             </div>
-            <div style="width:220px;">
+            <div style="width:180px;">
               <label>Data de Criação *</label>
               <input type="date" id="data-criacao" name="data_criacao" value="${hoje}" required style="width:100%;">
             </div>
-            <div style="width:240px;">
+            <div style="flex:1;min-width:200px;">
               <label>Responsável Pelo Pt. *</label>
               <input type="text" id="responsavel" name="responsavel" value="${esc(sessao.usuario)}" readonly style="width:100%;">
             </div>
           </div>
           
-          <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap;">
-            <div style="width:220px;">
+          <div style="display:flex;gap:10px;margin-top:8px;flex-wrap:wrap;">
+            <div style="width:140px;">
               <label>CPF *</label>
               <input type="text" id="cpf-incluir" name="cpf" maxlength="14" required 
                      inputmode="numeric" placeholder="000.000.000-00" style="width:100%;">
               <div id="cpf-incluir-feedback" class="campo-feedback hint">Informe 11 dígitos</div>
+              <div style="margin-top:4px;">
+                <label style="font-size:12px;font-weight:normal;cursor:pointer;display:flex;align-items:center;gap:4px;">
+                  <input type="checkbox" id="sem-cpf-checkbox" style="cursor:pointer;">
+                  <span>Cliente Sem CPF</span>
+                </label>
+              </div>
             </div>
-            <div style="flex:1;min-width:250px;">
+            <div style="flex:1;min-width:200px;">
               <label>Nome do Requerente *</label>
-              <input type="text" id="nome-requerente" name="nome_requerente" maxlength="60" required style="width:100%;">
+              <input type="text" id="nome-requerente" name="nome_requerente" maxlength="60" required style="width:100%;text-transform:uppercase;">
             </div>
-            <div style="width:300px;">
-              <label>Título/Assunto *</label>
-              <input type="text" id="titulo" name="titulo" maxlength="120" required style="width:100%;">
+            <div style="width:170px;">
+              <label>WhatsApp</label>
+              <input type="text" id="whatsapp-incluir" name="whatsapp" maxlength="20" value="+55(24)" 
+                     inputmode="tel" placeholder="+55(24)00000-0000" style="width:100%;">
             </div>
-          </div>
-          
-          <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap;">
-            <div style="flex:1;min-width:250px;">
-              <label>Nome da parte no ato</label>
-              <input type="text" id="nome-parte-ato" name="nome_parte_ato" maxlength="120" style="width:100%;">
-            </div>
-            <div style="width:220px;">
-              <label>Status *</label>
-              <select id="status" name="status" required style="width:100%;">
-                <option value="">Selecione</option>
-                ${STATUS_OPTIONS.map(s => `<option>${esc(s)}</option>`).join('')}
-              </select>
-            </div>
-            <div style="width:220px;">
+            <div style="width:150px;">
               <label>Categoria *</label>
               <select id="categoria" name="categoria" required style="width:100%;">
                 <option value="">Selecione</option>
                 ${CATEGORIA_OPTIONS.map(c => `<option>${esc(c)}</option>`).join('')}
               </select>
             </div>
+            <div style="width:150px;">
+              <label>Status *</label>
+              <select id="status" name="status" required style="width:100%;">
+                <option value="">Selecione</option>
+                ${STATUS_OPTIONS.map(s => `<option>${esc(s)}</option>`).join('')}
+              </select>
+            </div>
           </div>
           
-          <div style="margin-top:8px;">
-            <label>Outras Informações / Cartorio do Ato Original</label>
-            <input type="text" name="outras_infos" maxlength="120" style="width:100%;">
+          <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap;">
+            <div style="flex:1;min-width:200px;">
+              <label>Nome da parte no ato</label>
+              <input type="text" id="nome-parte-ato" name="nome_parte_ato" maxlength="120" style="width:100%;text-transform:uppercase;">
+            </div>
+            <div style="flex:1;min-width:250px;">
+              <label>Título/Assunto *</label>
+              <input type="text" id="titulo" name="titulo" maxlength="120" required style="width:100%;text-transform:uppercase;">
+            </div>
+            <div style="flex:1;min-width:250px;">
+              <label>Outras Informações / Cartorio do Ato Original</label>
+              <input type="text" name="outras_infos" maxlength="120" style="width:100%;text-transform:uppercase;">
+            </div>
           </div>
           
           <div style="margin-top:8px;">
@@ -1886,23 +2123,99 @@ function navegar(pagina) {
     // Configuração do CPF
     const cpfInput = document.getElementById("cpf-incluir");
     const cpfFeedback = document.getElementById("cpf-incluir-feedback");
+    const semCpfCheckbox = document.getElementById("sem-cpf-checkbox");
     setupCpfInput(cpfInput, cpfFeedback, btnSalvarIncluir);
     
-    // Auto-preenchimento do nome do requerente
+    // Lógica do checkbox "Cliente Sem CPF"
+    semCpfCheckbox.addEventListener("change", function() {
+      if (this.checked) {
+        // Desabilitar campo CPF e remover required
+        cpfInput.disabled = true;
+        cpfInput.required = false;
+        cpfInput.value = "";
+        cpfFeedback.textContent = "CPF não obrigatório";
+        cpfFeedback.className = "campo-feedback hint";
+        // Desabilitar validação do CPF
+        cpfInput.style.backgroundColor = "#f5f5f5";
+      } else {
+        // Habilitar campo CPF e adicionar required
+        cpfInput.disabled = false;
+        cpfInput.required = true;
+        cpfFeedback.textContent = "Informe 11 dígitos";
+        cpfFeedback.className = "campo-feedback hint";
+        cpfInput.style.backgroundColor = "";
+      }
+    });
+    
+    // Event listener no campo CPF - desabilitar checkbox se CPF digitado
+    cpfInput.addEventListener("input", function() {
+      const cpfValue = cpfInput.value.trim();
+      if (cpfValue && cpfValue !== "") {
+        semCpfCheckbox.disabled = true;
+        semCpfCheckbox.style.opacity = "0.5";
+        semCpfCheckbox.style.cursor = "not-allowed";
+      } else {
+        semCpfCheckbox.disabled = false;
+        semCpfCheckbox.style.opacity = "1";
+        semCpfCheckbox.style.cursor = "pointer";
+      }
+    });
+    
+    // Auto-preenchimento do nome do requerente e WhatsApp
     cpfInput.addEventListener("blur", async () => {
+      // Não executar se checkbox está marcado
+      if (semCpfCheckbox.checked) return;
+      
       const cpf = somenteDigitos(cpfInput.value);
       const nomeInput = document.getElementById("nome-requerente");
-      if (cpf.length === 11 && isCpfValido(cpf) && !nomeInput.value.trim()) {
+      const whatsappInput = document.getElementById("whatsapp-incluir");
+      
+      if (cpf.length === 11 && isCpfValido(cpf)) {
         try {
           const resp = await fetchWithAuth("/api/protocolo/nome_requerente_por_cpf?cpf=" + cpf);
           if (resp.ok) {
             const data = await resp.json();
-            if (data.nome_requerente) {
-              nomeInput.value = data.nome_requerente;
+            
+            // Auto-preencher nome se não estiver preenchido
+            if (data.nome_requerente && !nomeInput.value.trim()) {
+              nomeInput.value = data.nome_requerente.toUpperCase();
               mostrarMensagem("Nome do requerente preenchido automaticamente", "sucesso", 3000);
+            }
+            
+            // Auto-preencher WhatsApp se disponível e campo não foi alterado
+            if (data.whatsapp && (whatsappInput.value === "+55(24)" || !whatsappInput.value.trim())) {
+              whatsappInput.value = data.whatsapp;
+              if (data.nome_requerente && !nomeInput.value.trim()) {
+                mostrarMensagem("Nome e WhatsApp preenchidos automaticamente", "sucesso", 3000);
+              } else if (data.nome_requerente) {
+                mostrarMensagem("Nome e WhatsApp preenchidos automaticamente", "sucesso", 3000);
+              } else {
+                mostrarMensagem("WhatsApp preenchido automaticamente", "sucesso", 3000);
+              }
+            } else if (data.whatsapp) {
+              console.log("WhatsApp não preenchido. Valor atual:", whatsappInput.value);
             }
           }
         } catch {}
+      }
+    });
+
+    // Converter campos para maiúsculas ao digitar
+    const uppercaseFields = [
+      document.getElementById("nome-requerente"),
+      document.getElementById("nome-parte-ato"),
+      document.getElementById("titulo"),
+      document.querySelector('input[name="outras_infos"]')
+    ];
+    
+    uppercaseFields.forEach(field => {
+      if (field) {
+        field.addEventListener("input", function() {
+          const start = this.selectionStart;
+          const end = this.selectionEnd;
+          this.value = this.value.toUpperCase();
+          this.setSelectionRange(start, end);
+        });
       }
     });
 
@@ -1917,10 +2230,19 @@ function navegar(pagina) {
         return;
       }
       
-      dados.cpf = somenteDigitos(dados.cpf || "");
-      if (!/^\d{11}$/.test(dados.cpf) || !isCpfValido(dados.cpf)) {
-        mostrarMensagem("CPF inválido.", "erro");
-        return;
+      // Adicionar o estado do checkbox sem_cpf
+      dados.sem_cpf = semCpfCheckbox.checked;
+      
+      // Validar CPF apenas se checkbox não estiver marcado
+      if (!semCpfCheckbox.checked) {
+        dados.cpf = somenteDigitos(dados.cpf || "");
+        if (!/^\d{11}$/.test(dados.cpf) || !isCpfValido(dados.cpf)) {
+          mostrarMensagem("CPF inválido.", "erro");
+          return;
+        }
+      } else {
+        // Se checkbox marcado, enviar CPF vazio
+        dados.cpf = "";
       }
       
       dados.ultima_alteracao_nome = sessao.usuario;
@@ -1942,6 +2264,15 @@ function navegar(pagina) {
           document.getElementById('data-criacao').value = hoje;
           document.getElementById('responsavel').value = sessao.usuario;
           numeroInput.dispatchEvent(new Event("input"));
+          // Resetar checkbox e restaurar estado do CPF
+          if (semCpfCheckbox) {
+            semCpfCheckbox.checked = false;
+            cpfInput.disabled = false;
+            cpfInput.required = true;
+            cpfInput.style.backgroundColor = "";
+            cpfFeedback.textContent = "Informe 11 dígitos";
+            cpfFeedback.className = "campo-feedback hint";
+          }
         } else {
           const erro = await resp.json().catch(()=>({}));
           mostrarMensagem(erro.detail || "Erro ao salvar protocolo.", "erro");
@@ -1978,10 +2309,10 @@ function navegar(pagina) {
         
         <form id="form-busca" autocomplete="off" style="max-width:1100px;">
           <div style="display:flex;gap:12px;margin-bottom:8px;flex-wrap:wrap;">
-            <div style="flex:1;min-width:250px;">
+            <div style="flex:1;min-width:400px;">
               <label>Busca global</label>
               <input type="text" id="buscar-palavra" maxlength="50" 
-                     placeholder="Qualquer termo, número, nome, título..." style="width:100;">
+                     placeholder="Qualquer termo, número, nome, título..." style="width:100%;">
             </div>
             <div style="width:220px;">
               <label>Número do Protocolo</label>
@@ -2175,6 +2506,7 @@ function navegar(pagina) {
             <div style="margin-left:auto;align-self:flex-end;">
               <button type="submit">🔍 Carregar</button>
               <button type="button" id="voltar-menu-editar">← Voltar ao Menu</button>
+              <button type="button" id="btn-whatsapp-mensagem" style="display:none;background:#25d366;color:white;border:none;padding:10px 20px;border-radius:8px;font-weight:600;cursor:pointer;">💬 Enviar Mensagem WhatsApp</button>
             </div>
           </div>
           <div style="margin-top:8px;color:#666;font-size:0.9em;">
@@ -2751,6 +3083,153 @@ function montarFormularioEditar(p) {
   let sessao = getSessao();
   const isAdmin = (sessao && sessao.tipo === 'admin');
   
+  // Show WhatsApp button in the top section
+  const whatsappBtn = document.getElementById('btn-whatsapp-mensagem');
+  if (whatsappBtn) {
+    whatsappBtn.style.display = 'inline-block';
+    
+    // Set up WhatsApp button handler
+    whatsappBtn.onclick = async function() {
+      // Validate required fields before sending
+      if (!p.numero || !p.nome_requerente) {
+        mostrarMensagem('Protocolo ou nome do requerente não está disponível.', 'erro');
+        return;
+      }
+      
+      // Check if WhatsApp was already sent
+      if (p.whatsapp_enviado_em) {
+        const dataEnvio = p.whatsapp_enviado_em;
+        const usuarioEnvio = p.whatsapp_enviado_por || 'Usuário desconhecido';
+        
+        const confirmacao = confirm(
+          `⚠️ WhatsApp já enviado!\n\n` +
+          `📅 Data: ${dataEnvio}\n` +
+          `👤 Por: ${usuarioEnvio}\n\n` +
+          `Deseja enviar novamente?`
+        );
+        
+        if (!confirmacao) {
+          return; // User cancelled
+        }
+      }
+      
+      const numero = p.numero;
+      const nomeRequerente = p.nome_requerente;
+      const nomeParteAto = p.nome_parte_ato || nomeRequerente;
+      const status = p.status || 'Não informado';
+      const whatsappNumber = p.whatsapp || '';
+      const usuarioLogado = sessao.usuario || 'Atendente';
+      const observacoes = p.observacoes || '';
+      
+      // Format the message based on status
+      let mensagem = '';
+      
+      // Convert status to uppercase for comparison
+      const statusUpper = status.toUpperCase().trim();
+      
+      if (statusUpper === 'CONCLUIDO' || statusUpper === 'CONCLUÍDO') {
+        // Message for CONCLUIDO status
+        mensagem = encodeURIComponent(
+          `Olá, Sr.(a) *${nomeRequerente}*\n\n` +
+          `O 📋 *Protocolo ${numero}*, em nome de: *${nomeParteAto}*, está com 📊 Status: ${status}.\n\n` +
+          `Para retirar seu pedido é preciso apresentar o *protocolo original*, caso tenha perdido apenas o requerente poderá retirar.\n\n` +
+          `Atenciosamente\n${usuarioLogado}`
+        );
+      } else if (statusUpper === 'EM ANDAMENTO') {
+        // Message for EM ANDAMENTO status
+        mensagem = encodeURIComponent(
+          `Olá, Sr.(a) *${nomeRequerente}*\n\n` +
+          `O 📋 *Protocolo ${numero}*, em nome de: *${nomeParteAto}*, está com 📊 Status: ${status}.\n\n` +
+          `Seu protocolo está na fila de processos e em breve vamos lhe dar um retorno.\n\n` +
+          `Atenciosamente\n${usuarioLogado}`
+        );
+      } else if (statusUpper === 'EXIGENCIA' || statusUpper === 'EXIGÊNCIA') {
+        // Message for EXIGENCIA status (includes observações/exigências)
+        const exigenciasTexto = observacoes.trim() 
+          ? `\n${observacoes}\n` 
+          : '\n(Sem exigências especificadas)\n';
+        
+        mensagem = encodeURIComponent(
+          `Olá, Sr.(a) *${nomeRequerente}*\n\n` +
+          `O 📋 *Protocolo ${numero}*, em nome de: *${nomeParteAto}*, está com 📊 Status: ${status}.\n\n` +
+          `Para darmos continuidade precisamos que as EXIGENCIAS abaixo sejam cumprida:` +
+          exigenciasTexto +
+          `\nAtenciosamente\n${usuarioLogado}`
+        );
+      } else {
+        // Default message for other statuses
+        mensagem = encodeURIComponent(
+          `Olá, Sr.(a) *${nomeRequerente}*\n\n` +
+          `O 📋 *Protocolo ${numero}*, em nome de: *${nomeParteAto}*, está com 📊 Status: ${status}.\n\n` +
+          `Para mais informações, entre em contato com nosso atendimento.\n\n` +
+          `Atenciosamente\n${usuarioLogado}`
+        );
+      }
+      
+      // Open WhatsApp desktop/mobile app with the message
+      // If phone number is provided, send directly to that number
+      const whatsappUrl = whatsappNumber 
+        ? `whatsapp://send?phone=${encodeURIComponent(whatsappNumber.replace(/\D/g, ''))}&text=${mensagem}`
+        : `whatsapp://send?text=${mensagem}`;
+      
+      // Use window.open to avoid navigating away from the current page
+      window.open(whatsappUrl, '_blank');
+      
+      // Update protocol with send timestamp
+      try {
+        const agora = new Date();
+        const dataFormatada = agora.toLocaleString('pt-BR', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit'
+        });
+        
+        const respUpdate = await fetchWithAuth(`/api/protocolo/${p.id}`, {
+          method: 'PUT',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            whatsapp_enviado_em: dataFormatada,
+            whatsapp_enviado_por: usuarioLogado
+          })
+        });
+        
+        if (respUpdate.ok) {
+          // Update local protocol data
+          p.whatsapp_enviado_em = dataFormatada;
+          p.whatsapp_enviado_por = usuarioLogado;
+          mostrarMensagem('WhatsApp enviado e registrado com sucesso!', 'sucesso');
+        }
+      } catch (error) {
+        console.error('Erro ao registrar envio de WhatsApp:', error);
+        // Don't show error to user, as WhatsApp was sent successfully
+      }
+    };
+    
+    // Add WhatsApp send info display next to button
+    // Check if there's already a send info span and remove it
+    const existingInfo = document.getElementById('whatsapp-send-info');
+    if (existingInfo) {
+      existingInfo.remove();
+    }
+    
+    // If WhatsApp was sent before, display the info
+    if (p.whatsapp_enviado_em && p.whatsapp_enviado_por) {
+      const infoSpan = document.createElement('span');
+      infoSpan.id = 'whatsapp-send-info';
+      infoSpan.style.cssText = 'color:#666; font-size:0.9em; margin-left:15px; font-style:italic; display:inline-block;';
+      infoSpan.innerHTML = `
+        <span style="color:#25d366;">✅</span> 
+        Último envio: ${esc(p.whatsapp_enviado_em)} por ${esc(p.whatsapp_enviado_por)}
+      `;
+      
+      // Insert after WhatsApp button
+      whatsappBtn.parentNode.insertBefore(infoSpan, whatsappBtn.nextSibling);
+    }
+  }
+  
   // Verificar se há exigências preenchidas
   const hasExigData = (i) => {
     const rp = (p[`exig${i}_retirada_por`] || "").trim();
@@ -2763,67 +3242,77 @@ function montarFormularioEditar(p) {
   const temExigenciaPreenchida = hasExigData(1) || hasExigData(2) || hasExigData(3);
 
   document.getElementById('form-editar').innerHTML = `
-    <form id="form-editar-protocolo" autocomplete="off" style="max-width:1000px;">
+    <form id="form-editar-protocolo" autocomplete="off" style="max-width:1200px;">
       <div style="background:#e8f5e8;padding:12px;border-radius:6px;margin-bottom:16px;border:1px solid #c8e6c9;">
         <strong>📋 Editando Protocolo:</strong> ${esc(p.numero)} | <strong>👤 Requerente:</strong> ${esc(p.nome_requerente)} | <strong>🔢 CPF:</strong> ${esc(formatCpf(p.cpf))}
       </div>
       
       <div style="display:flex;gap:12px;flex-wrap:wrap;">
-        <div style="flex:1;min-width:200px;">
+        <div style="flex:1;min-width:180px;">
           <label>Número do Protocolo *</label>
           <input type="text" id="editar-numero-protocolo" name="numero" value="${esc(p.numero)}" 
                  maxlength="5" minlength="5" pattern="^\\d{5}$" required 
                  ${isAdmin ? '' : 'readonly'} style="width:100%;">
           <div id="editar-numero-protocolo-feedback" class="campo-feedback"></div>
         </div>
-        <div style="width:200px;">
+        <div style="width:180px;">
           <label>Data de Criação *</label>
           <input type="date" id="editar-data-criacao" name="data_criacao" value="${esc(p.data_criacao)}" required style="width:100%;">
         </div>
-        <div style="width:220px;">
+        <div style="flex:1;min-width:200px;">
           <label>Responsável Pelo Pt. *</label>
           <input type="text" id="editar-responsavel" name="responsavel" value="${esc(p.responsavel)}" readonly style="width:100%;">
         </div>
       </div>
       
-      <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap;">
-        <div style="flex:1;min-width:250px;">
-          <label>Nome do Requerente *</label>
-          <input type="text" id="editar-nome-requerente" name="nome_requerente" value="${esc(p.nome_requerente)}" maxlength="60" required style="width:100%;">
-        </div>
-        <div style="width:200px;">
+      <div style="display:flex;gap:10px;margin-top:8px;flex-wrap:wrap;">
+        <div style="width:140px;">
           <label>CPF *</label>
           <input type="text" id="cpf-editar" name="cpf" value="${esc(formatCpf(p.cpf))}" maxlength="14" required style="width:100%;">
           <div id="cpf-editar-feedback" class="campo-feedback hint">Informe 11 dígitos</div>
+          <div style="margin-top:4px;">
+            <label style="font-size:12px;font-weight:normal;cursor:pointer;display:flex;align-items:center;gap:4px;">
+              <input type="checkbox" id="sem-cpf-checkbox-editar" ${!p.cpf || p.sem_cpf ? 'checked' : ''} style="cursor:pointer;">
+              <span>Cliente Sem CPF</span>
+            </label>
+          </div>
         </div>
-        <div style="width:220px;">
-          <label>Status *</label>
-          <select id="editar-status" name="status" required style="width:100%;">
-            ${STATUS_OPTIONS.map(s => `<option${p.status === s ? ' selected' : ''}>${esc(s)}</option>`).join('')}
-          </select>
+        <div style="flex:1;min-width:200px;">
+          <label>Nome do Requerente *</label>
+          <input type="text" id="editar-nome-requerente" name="nome_requerente" value="${esc(p.nome_requerente)}" maxlength="60" required style="width:100%;text-transform:uppercase;">
         </div>
-        <div style="width:220px;">
+        <div style="width:170px;">
+          <label>WhatsApp</label>
+          <input type="text" id="whatsapp-editar" name="whatsapp" value="${esc(p.whatsapp || '+55(24)')}" maxlength="20" 
+                 inputmode="tel" placeholder="+55(24)00000-0000" style="width:100%;">
+        </div>
+        <div style="width:150px;">
           <label>Categoria *</label>
           <select id="editar-categoria" name="categoria" required style="width:100%;">
             ${CATEGORIA_OPTIONS.map(c => `<option${p.categoria === c ? ' selected' : ''}>${esc(c)}</option>`).join('')}
           </select>
         </div>
+        <div style="width:150px;">
+          <label>Status *</label>
+          <select id="editar-status" name="status" required style="width:100%;">
+            ${STATUS_OPTIONS.map(s => `<option${p.status === s ? ' selected' : ''}>${esc(s)}</option>`).join('')}
+          </select>
+        </div>
       </div>
       
       <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap;">
-        <div style="flex:1;min-width:250px;">
+        <div style="flex:1;min-width:200px;">
           <label>Nome da parte no ato</label>
-          <input type="text" id="editar-nome-parte-ato" name="nome_parte_ato" value="${esc(p.nome_parte_ato || '')}" maxlength="120" style="width:100%;">
+          <input type="text" id="editar-nome-parte-ato" name="nome_parte_ato" value="${esc(p.nome_parte_ato || '')}" maxlength="120" style="width:100%;text-transform:uppercase;">
         </div>
-        <div style="flex:2;min-width:300px;">
+        <div style="flex:1;min-width:250px;">
           <label>Título/Assunto *</label>
-          <input type="text" id="editar-titulo" name="titulo" value="${esc(p.titulo)}" maxlength="120" required style="width:100%;">
+          <input type="text" id="editar-titulo" name="titulo" value="${esc(p.titulo)}" maxlength="120" required style="width:100%;text-transform:uppercase;">
         </div>
-      </div>
-      
-      <div style="margin-top:8px;">
-        <label>Outras Informações / Cartorio do Ato Original</label>
-        <input type="text" id="editar-outras-infos" name="outras_infos" value="${esc(p.outras_infos || '')}" maxlength="120" style="width:100%;">
+        <div style="flex:1;min-width:250px;">
+          <label>Outras Informações / Cartorio do Ato Original</label>
+          <input type="text" id="editar-outras-infos" name="outras_infos" value="${esc(p.outras_infos || '')}" maxlength="120" style="width:100%;text-transform:uppercase;">
+        </div>
       </div>
       
       <div style="margin-top:8px;">
@@ -2905,8 +3394,9 @@ function montarFormularioEditar(p) {
       
       <div style="margin-top:20px;display:flex;gap:12px;flex-wrap:wrap;">
         <button type="submit" id="btn-salvar-editar">💾 Salvar Alterações</button>
-        <button type="button" id="btn-ver-historico">📋 Ver histórico</button>
         <button type="button" id="voltar-menu-editar-form">← Voltar ao Menu</button>
+        <button type="button" onclick="this.form.reset();">🔄 Limpar</button>
+        <button type="button" id="btn-ver-historico">📋 Ver histórico</button>
       </div>
     </form>
     <div id="historico-lista" style="margin-top:20px;"></div>
@@ -2942,7 +3432,51 @@ function montarFormularioEditar(p) {
   // Configurar CPF
   const cpfInput = document.getElementById("cpf-editar");
   const feedback = document.getElementById("cpf-editar-feedback");
+  const semCpfCheckboxEditar = document.getElementById("sem-cpf-checkbox-editar");
   setupCpfInput(cpfInput, feedback);
+  
+  // Lógica do checkbox "Cliente Sem CPF" para editar
+  if (semCpfCheckboxEditar) {
+    // Set initial state based on checkbox
+    if (semCpfCheckboxEditar.checked) {
+      cpfInput.disabled = true;
+      cpfInput.required = false;
+      cpfInput.style.backgroundColor = "#f5f5f5";
+      feedback.textContent = "CPF não obrigatório";
+      feedback.className = "campo-feedback hint";
+    }
+    
+    semCpfCheckboxEditar.addEventListener("change", function() {
+      if (this.checked) {
+        cpfInput.disabled = true;
+        cpfInput.required = false;
+        cpfInput.value = "";
+        feedback.textContent = "CPF não obrigatório";
+        feedback.className = "campo-feedback hint";
+        cpfInput.style.backgroundColor = "#f5f5f5";
+      } else {
+        cpfInput.disabled = false;
+        cpfInput.required = true;
+        feedback.textContent = "Informe 11 dígitos";
+        feedback.className = "campo-feedback hint";
+        cpfInput.style.backgroundColor = "";
+      }
+    });
+    
+    // Event listener no campo CPF - desabilitar checkbox se CPF digitado
+    cpfInput.addEventListener("input", function() {
+      const cpfValue = cpfInput.value.trim();
+      if (cpfValue && cpfValue !== "") {
+        semCpfCheckboxEditar.disabled = true;
+        semCpfCheckboxEditar.style.opacity = "0.5";
+        semCpfCheckboxEditar.style.cursor = "not-allowed";
+      } else {
+        semCpfCheckboxEditar.disabled = false;
+        semCpfCheckboxEditar.style.opacity = "1";
+        semCpfCheckboxEditar.style.cursor = "pointer";
+      }
+    });
+  }
 
   // ADICIONAR EVENTO PARA O BOTÃO DE INCLUIR EXIGÊNCIA
   document.getElementById("btn-incluir-exigencia").onclick = function() {
@@ -2958,6 +3492,25 @@ function montarFormularioEditar(p) {
     document.getElementById("btn-incluir-exigencia").style.display = "none";
   }
 
+  // Converter campos para maiúsculas ao digitar (edit form)
+  const uppercaseFieldsEdit = [
+    document.getElementById("editar-nome-requerente"),
+    document.getElementById("editar-nome-parte-ato"),
+    document.getElementById("editar-titulo"),
+    document.getElementById("editar-outras-infos")
+  ];
+  
+  uppercaseFieldsEdit.forEach(field => {
+    if (field) {
+      field.addEventListener("input", function() {
+        const start = this.selectionStart;
+        const end = this.selectionEnd;
+        this.value = this.value.toUpperCase();
+        this.setSelectionRange(start, end);
+      });
+    }
+  });
+
   document.getElementById("form-editar-protocolo").onsubmit = async function(e) {
     e.preventDefault();
     
@@ -2969,7 +3522,15 @@ function montarFormularioEditar(p) {
       return;
     }
     
-    const camposObrigatorios = ["editar-data-criacao","editar-nome-requerente","cpf-editar","editar-titulo","editar-status","editar-categoria"];
+    // Verificar se checkbox sem CPF está marcado
+    const semCpfChecked = semCpfCheckboxEditar && semCpfCheckboxEditar.checked;
+    
+    // Ajustar campos obrigatórios baseado no checkbox
+    let camposObrigatorios = ["editar-data-criacao","editar-nome-requerente","editar-titulo","editar-status","editar-categoria"];
+    if (!semCpfChecked) {
+      camposObrigatorios.push("cpf-editar");
+    }
+    
     if (!validarCamposObrigatorios(camposObrigatorios)) {
       mostrarMensagem("Preencha todos os campos obrigatórios.", "erro");
       return;
@@ -3006,7 +3567,17 @@ function montarFormularioEditar(p) {
     
     let dados = Object.fromEntries(new FormData(e.target).entries());
     delete dados.responsavel;
-    dados.cpf = somenteDigitos(dados.cpf);
+    
+    // Adicionar o estado do checkbox sem_cpf
+    dados.sem_cpf = semCpfChecked;
+    
+    // Validar CPF apenas se checkbox não estiver marcado
+    if (!semCpfChecked) {
+      dados.cpf = somenteDigitos(dados.cpf);
+    } else {
+      // Se checkbox marcado, enviar CPF vazio
+      dados.cpf = "";
+    }
     
     // Validar retirada
     const rp = (dados.retirado_por || "").trim();
@@ -3028,8 +3599,25 @@ function montarFormularioEditar(p) {
       
       esconderLoader();
       if (resp.ok) {
-        mostrarMensagem('Alterações salvas com sucesso!', 'sucesso');
-        navegar('editar');
+        mostrarMensagem('Alterações salvas com sucesso! Recarregando protocolo...', 'sucesso');
+        
+        // Recarregar o protocolo atualizado
+        try {
+          const respProtocolo = await fetchWithAuth('/api/protocolo/' + p.id);
+          if (respProtocolo.ok) {
+            const protocoloAtualizado = await respProtocolo.json();
+            // Reabrir o protocolo em modo de edição com dados atualizados
+            montarFormularioEditar(protocoloAtualizado);
+            // Scroll para o topo para melhor UX
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          } else {
+            // Se falhar ao recarregar, apenas navegar para editar
+            navegar('editar');
+          }
+        } catch {
+          // Se falhar ao recarregar, apenas navegar para editar
+          navegar('editar');
+        }
       } else {
         const erro = await resp.json().catch(() => ({}));
         mostrarMensagem(erro.detail || 'Erro ao salvar alterações!', 'erro');
@@ -4322,6 +4910,52 @@ function debounce(fn, wait) {
 
 // ====================== [BLOCO 26: INICIALIZAÇÃO DE COMPONENTES] ====================== //
 document.addEventListener('DOMContentLoaded', function() {
+  // ====================== MOBILE MENU TOGGLE ======================
+  const menuToggle = document.getElementById('menu-toggle');
+  const menuLateral = document.getElementById('menu-lateral');
+  
+  // Show/hide hamburger button based on screen size
+  function updateMenuToggleVisibility() {
+    if (window.innerWidth <= 768) {
+      if (menuToggle) menuToggle.style.display = 'block';
+    } else {
+      if (menuToggle) menuToggle.style.display = 'none';
+      if (menuLateral) menuLateral.classList.remove('menu-open');
+    }
+  }
+  
+  // Toggle menu on button click
+  if (menuToggle && menuLateral) {
+    menuToggle.addEventListener('click', function(e) {
+      e.stopPropagation();
+      menuLateral.classList.toggle('menu-open');
+    });
+    
+    // Close menu when clicking outside
+    document.addEventListener('click', function(e) {
+      if (menuLateral.classList.contains('menu-open') && 
+          !menuLateral.contains(e.target) && 
+          !menuToggle.contains(e.target)) {
+        menuLateral.classList.remove('menu-open');
+      }
+    });
+    
+    // Close menu when clicking a menu item
+    const menuButtons = menuLateral.querySelectorAll('.menu-btn');
+    menuButtons.forEach(btn => {
+      btn.addEventListener('click', function() {
+        if (window.innerWidth <= 768) {
+          menuLateral.classList.remove('menu-open');
+        }
+      });
+    });
+  }
+  
+  // Update on load and resize
+  updateMenuToggleVisibility();
+  window.addEventListener('resize', updateMenuToggleVisibility);
+  
+  // ====================== NOTIFICATIONS ======================
   // Click handler for notification button
   const btnNotificacoes = document.getElementById('btn-notificacoes');
   if (btnNotificacoes) {

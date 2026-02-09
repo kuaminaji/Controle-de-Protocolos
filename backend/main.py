@@ -28,7 +28,7 @@ from bson.json_util import dumps as bson_dumps, loads as bson_loads
 from fastapi import FastAPI, HTTPException, Query, Body, Request, Depends, UploadFile, File, status
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field, validator, ValidationError
+from pydantic import BaseModel, Field, field_validator, ValidationError
 from pymongo import MongoClient, errors
 from pymongo.collection import Collection
 from pymongo import ASCENDING, DESCENDING
@@ -93,7 +93,9 @@ def get_allowed_categorias() -> set:
 class ProtocoloModel(BaseModel):
     numero: str = Field(..., min_length=5, max_length=10, description="Número do protocolo, 5-10 dígitos numéricos.")
     nome_requerente: str = Field(..., max_length=60)
-    cpf: str = Field(..., min_length=11, max_length=14)
+    sem_cpf: bool = Field(default=False, description="Flag indicating client without CPF")
+    cpf: str = Field(default="", min_length=0, max_length=14)  # Made optional
+    whatsapp: str = Field(default="", max_length=20)
     titulo: str = Field(..., max_length=120)
     nome_parte_ato: str = Field(default="", max_length=120)
     outras_infos: str = Field(default="", max_length=120)
@@ -107,6 +109,8 @@ class ProtocoloModel(BaseModel):
     ultima_alteracao_data: str = ""
     retirado_por: str = ""
     data_retirada: str = ""
+    whatsapp_enviado_em: str = Field(default="", max_length=30, description="Data/hora do último envio WhatsApp")
+    whatsapp_enviado_por: str = Field(default="", max_length=60, description="Usuário que enviou última mensagem WhatsApp")
     exig1_retirada_por: str = Field(default="", max_length=60)
     exig1_data_retirada: str = Field(default="", max_length=10)
     exig1_reapresentada_por: str = Field(default="", max_length=60)
@@ -120,33 +124,41 @@ class ProtocoloModel(BaseModel):
     exig3_reapresentada_por: str = Field(default="", max_length=60)
     exig3_data_reapresentacao: str = Field(default="", max_length=10)
     
-    @validator('numero')
+    @field_validator('numero')
+    @classmethod
     def numero_valido(cls, v):
         if not v.isdigit() or not (5 <= len(v) <= 10):
             raise ValueError("Número do protocolo deve conter entre 5 e 10 dígitos.")
         return v
     
-    @validator('cpf')
-    def cpf_valido(cls, v):
+    @field_validator('cpf')
+    @classmethod
+    def cpf_valido(cls, v, info):
+        # Allow empty CPF when sem_cpf flag is True
+        if info.data.get('sem_cpf', False) and not v:
+            return v
         if not validar_cpf(v):
             raise ValueError("CPF inválido. Informe um CPF válido.")
         return v
     
-    @validator('status')
+    @field_validator('status')
+    @classmethod
     def status_valido(cls, v):
         allowed = {"Pendente", "Em andamento", "Concluído", "Exigência", "EXCLUIDO"}
         if v not in allowed:
             raise ValueError("Status inválido.")
         return v
     
-    @validator('categoria')
+    @field_validator('categoria')
+    @classmethod
     def categoria_valida(cls, v):
         allowed = get_allowed_categorias()
         if v not in allowed:
             raise ValueError("Categoria inválida.")
         return v
     
-    @validator('data_criacao')
+    @field_validator('data_criacao')
+    @classmethod
     def data_criacao_valida(cls, v):
         try:
             data = datetime.strptime(v, "%Y-%m-%d").replace(tzinfo=timezone.utc)
@@ -166,7 +178,8 @@ class CategoriaModel(BaseModel):
     nome: str = Field(..., min_length=1, max_length=60)
     descricao: Optional[str] = Field(default="", max_length=240)
 
-    @validator('nome')
+    @field_validator('nome')
+    @classmethod
     def nome_strip(cls, v):
         v2 = v.strip()
         if not v2:
@@ -677,8 +690,15 @@ def incluir_protocolo(protocolo: ProtocoloModel):
     cpf = apenas_digitos(cpf_raw)
     if len(numero) != 5:
         raise HTTPException(status_code=400, detail="Número do protocolo deve conter exatamente 5 dígitos.")
-    if not validar_cpf(cpf):
-        raise HTTPException(status_code=400, detail="CPF inválido. Informe um CPF válido.")
+    
+    # Only validate CPF if sem_cpf is False
+    if not protocolo.sem_cpf:
+        if not validar_cpf(cpf):
+            raise HTTPException(status_code=400, detail="CPF inválido. Informe um CPF válido.")
+    else:
+        # If sem_cpf is True, set CPF to empty string
+        cpf = ""
+    
     if status not in ALLOWED_STATUS:
         raise HTTPException(status_code=400, detail="Status inválido.")
     allowed_cats = get_allowed_categorias()
@@ -718,6 +738,23 @@ def incluir_protocolo(protocolo: ProtocoloModel):
         res = protocolos_coll.insert_one(novo)
         protocolo_id = str(res.inserted_id)
         logger.info(f"Protocolo {numero} criado")
+        
+        # Update nome_requerente and whatsapp in all other protocols with the same CPF
+        # Only sync if CPF is provided (not empty)
+        if cpf:
+            update_data = {}
+            if novo.get("nome_requerente"):
+                update_data["nome_requerente"] = novo["nome_requerente"]
+            if novo.get("whatsapp"):
+                update_data["whatsapp"] = novo["whatsapp"]
+            
+            if update_data:
+                protocolos_coll.update_many(
+                    {"cpf": cpf, "numero": {"$ne": numero}},
+                    {"$set": update_data}
+                )
+                logger.info(f"Dados do requerente atualizados para CPF {cpf}")
+        
         return {"id": protocolo_id}
     except errors.DuplicateKeyError:
         raise HTTPException(status_code=400, detail="Já consta um protocolo com a numeração informada.")
@@ -970,11 +1007,20 @@ def editar_protocolo(id: str, protocolo: dict):
         else:
             atualizacao.pop("numero", None)
     atualizacao.pop("responsavel", None)
+    
+    # Handle sem_cpf flag
+    sem_cpf = atualizacao.get("sem_cpf", False)
+    
     if "cpf" in atualizacao:
         cpf_new = apenas_digitos(str(atualizacao["cpf"]))
-        if not validar_cpf(cpf_new):
-            raise HTTPException(status_code=400, detail="CPF inválido. Informe um CPF válido.")
-        atualizacao["cpf"] = cpf_new
+        # Only validate CPF if sem_cpf is False
+        if not sem_cpf:
+            if not validar_cpf(cpf_new):
+                raise HTTPException(status_code=400, detail="CPF inválido. Informe um CPF válido.")
+            atualizacao["cpf"] = cpf_new
+        else:
+            # If sem_cpf is True, set CPF to empty string
+            atualizacao["cpf"] = ""
     if "status" in atualizacao:
         status_novo = str(atualizacao["status"]).strip()
         if status_novo not in ALLOWED_STATUS:
@@ -1073,6 +1119,45 @@ def editar_protocolo(id: str, protocolo: dict):
     res = protocolos_coll.update_one({"_id": oid}, update_doc)
     if res.matched_count == 1:
         logger.info(f"Protocolo {prot.get('numero', '')} editado")
+        
+        # Se WhatsApp foi enviado, adicionar ao histórico
+        if "whatsapp_enviado_em" in atualizacao and atualizacao.get("whatsapp_enviado_em"):
+            whatsapp_numero = atualizacao.get("whatsapp") or prot.get("whatsapp", "N/A")
+            usuario_envio = atualizacao.get("whatsapp_enviado_por", "Sistema")
+            data_envio = atualizacao.get("whatsapp_enviado_em")
+            
+            # Adicionar entrada no histórico
+            historico_entry = {
+                "data": data_envio,
+                "usuario": usuario_envio,
+                "acao": f"WhatsApp enviado para {whatsapp_numero}"
+            }
+            
+            protocolos_coll.update_one(
+                {"_id": oid},
+                {"$push": {"historico": historico_entry}}
+            )
+            logger.info(f"Envio WhatsApp registrado no histórico do protocolo {prot.get('numero', '')}")
+        
+        # Update nome_requerente and whatsapp in all other protocols with the same CPF
+        # Only sync if CPF is present and sem_cpf is False
+        cpf_atualizado = atualizacao.get("cpf") or prot.get("cpf")
+        sem_cpf_flag = atualizacao.get("sem_cpf", prot.get("sem_cpf", False))
+        
+        if cpf_atualizado and not sem_cpf_flag:
+            update_data = {}
+            if "nome_requerente" in atualizacao and atualizacao.get("nome_requerente"):
+                update_data["nome_requerente"] = atualizacao["nome_requerente"]
+            if "whatsapp" in atualizacao and atualizacao.get("whatsapp"):
+                update_data["whatsapp"] = atualizacao["whatsapp"]
+            
+            if update_data:
+                protocolos_coll.update_many(
+                    {"cpf": cpf_atualizado, "_id": {"$ne": oid}},
+                    {"$set": update_data}
+                )
+                logger.info(f"Dados do requerente atualizados para CPF {cpf_atualizado}")
+        
         return {"ok": True}
     raise HTTPException(status_code=404, detail="Protocolo não encontrado ou não alterado.")
 
@@ -1190,8 +1275,11 @@ def nome_requerente_por_cpf(cpf: str):
     cpf_puro = apenas_digitos(cpf)
     p = protocolos_coll.find_one({"cpf": cpf_puro}, sort=[("data_criacao_dt", DESCENDING)])
     if p:
-        return {"nome_requerente": p.get("nome_requerente", "")}
-    return {"nome_requerente": ""}
+        return {
+            "nome_requerente": p.get("nome_requerente", ""),
+            "whatsapp": p.get("whatsapp", "")
+        }
+    return {"nome_requerente": "", "whatsapp": ""}
 
 @app.get("/api/protocolo/exigencias-pendentes")
 def protocolos_exigencias_pendentes_get(
@@ -1483,6 +1571,74 @@ def _serialize_doc(doc: Dict[str, Any]) -> Dict[str, Any]:
             continue
         out[k] = _serialize_value(v)
     return out
+
+# ====================== [FINALIZADOS ROUTE - Must be before /{id}] ======================
+@app.get("/api/protocolo/finalizados/{data}")
+def protocolos_finalizados_por_data(data: str):
+    try:
+        data_obj = datetime.strptime(data, "%Y-%m-%d")
+        dia_iso = data_obj.strftime("%Y-%m-%d")
+        dia_br = data_obj.strftime("%d/%m/%Y")
+
+        def _ts_matches_day(ts: Any) -> bool:
+            s = str(ts or "").strip()
+            return bool(s) and (s.startswith(dia_iso) or s.startswith(dia_br))
+
+        def _status_concluido(val: Any) -> bool:
+            return str(val or "").strip().lower() in {"concluído", "concluido"}
+
+        candidatos = list(protocolos_coll.find({
+            "status": {"$regex": "^conclu[íi]do$", "$options": "i"}
+        }))
+
+        saida = []
+        for p in candidatos:
+            incluir = False
+
+            for ev in (p.get("historico_alteracoes") or []):
+                if not isinstance(ev, dict): 
+                    continue
+                ts = ev.get("timestamp") or ev.get("data") or ev.get("created_at")
+                for ch in (ev.get("changes") or []):
+                    if not isinstance(ch, dict):
+                        continue
+                    campo = str(ch.get("campo") or ch.get("field") or "").strip().lower()
+                    para = ch.get("para") if "para" in ch else ch.get("to")
+                    if campo == "status" and _status_concluido(para) and _ts_matches_day(ts):
+                        incluir = True
+                        break
+                if incluir:
+                    break
+
+            if not incluir:
+                for h in (p.get("historico") or []):
+                    if not isinstance(h, dict):
+                        continue
+                    data_h = h.get("data") or h.get("timestamp")
+                    acao = str(h.get("acao") or h.get("action") or "").lower()
+                    if _ts_matches_day(data_h) and ("status" in acao or "conclu" in acao):
+                        incluir = True
+                        break
+
+            if not incluir and _ts_matches_day(p.get("ultima_alteracao_data")):
+                incluir = True
+
+            if incluir:
+                p_out = {k: v for k, v in p.items() if k not in [
+                    "_id", "data_criacao_dt", "data_retirada_dt", "historico_alteracoes",
+                    "exig1_data_retirada_dt","exig1_data_reapresentacao_dt",
+                    "exig2_data_retirada_dt","exig2_data_reapresentacao_dt",
+                    "exig3_data_retirada_dt","exig3_data_reapresentacao_dt"
+                ]}
+                p_out["id"] = str(p["_id"])
+                saida.append(p_out)
+
+        return saida
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Formato de data inválido. Use YYYY-MM-DD. Erro: {str(e)}")
+    except Exception as e:
+        logger.error(f"Erro ao buscar protocolos finalizados: {str(e)}")
+        raise HTTPException(status_code=500, detail="Erro interno ao buscar protocolos")
 
 @app.get("/api/protocolo/{id}", response_model=Optional[Dict[str, Any]])
 def get_protocolo_por_id(id: str):

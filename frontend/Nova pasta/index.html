@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <!-- ====================== [BLOCO: META E HEAD] ====================== -->
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gestão de Protocolos</title>
+  <link rel="icon" href="/static/logo.png" type="image/png" sizes="any" />
+  <meta name="theme-color" content="#0f172a" />
+  <link rel="stylesheet" href="/static/style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand" role="banner">
+        <img src="/static/logo.png" alt="Logo" class="brand-logo" />
+        <div class="brand-title">
+          <div class="brand-name">Gestão de Protocolos</div>
+          <div class="brand-sub">Painel administrativo</div>
+        </div>
+      </div>
+
+      <div class="topbar-actions" role="navigation" aria-label="Ações principais">
+        <button id="btn-notificacoes" class="icon-btn" aria-label="Notificações" title="Notificações">
+          🔔 <span id="badge-notificacoes" class="badge" style="display:none">0</span>
+        </button>
+        <button id="btn-user" class="user-btn" aria-label="Usuário atual" title="Menu do usuário">👤 <span id="usuario-logado-short"></span></button>
+      </div>
+    </div>
+  </header>
+
+  <div id="message-box" style="display:none;position:fixed;top:80px;left:50%;transform:translateX(-50%);z-index:9999;min-width:240px;max-width:92vw;padding:14px;border-radius:10px;text-align:center;font-weight:700;box-shadow:0 8px 26px rgba(11,35,64,0.12);"></div>
+  <img src="/static/bg.jpg" class="login-bg" alt="Fundo Login" />
+
+  <div id="notificacoes-container" style="display:none;position:fixed;top:92px;right:18px;z-index:9998;max-width:420px;">
+    <div id="notificacoes-panel" style="background:white;border:1px solid #e6e9ef;border-radius:12px;box-shadow:0 12px 36px rgba(11,35,64,0.08);max-height:480px;overflow-y:auto;">
+      <div style="padding:14px;background:#f7fbff;border-bottom:1px solid #edf3fb;display:flex;justify-content:space-between;align-items:center;">
+        <strong>Notificações</strong>
+        <button id="btn-fechar-notificacoes" style="background:none;border:none;font-size:18px;cursor:pointer;">×</button>
+      </div>
+      <div id="notificacoes-lista" style="padding:8px;"></div>
+    </div>
+  </div>
+
+  <div id="login-container" style="display:none"></div>
+  
+  <aside id="menu-lateral" style="display:none" aria-label="Menu lateral">
+    <div class="menu-header" style="display:flex;flex-direction:column;align-items:center;padding:20px 12px 12px 12px;">
+      <img src="/static/logo.png" alt="Logo" class="menu-logo" style="width:140px;height:140px;object-fit:contain;border-radius:8px;" />
+      <div style="position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden;" aria-hidden="false">
+        <h2 style="margin:0;font-size:1.1em;">Gestão de Protocolos</h2>
+        <div style="font-size:0.85em;color:#666;">
+          Usuário: <span id="usuario-logado" style="display:inline-block;"></span> (<span id="usuario-tipo" style="display:inline-block;"></span>)
+        </div>
+      </div>
+    </div>
+
+    <div class="menu-separator" style="border-bottom:1px solid #eef2f5;margin:6px 12px 12px 12px;"></div>
+    
+    <nav>
+      <ul>
+        <li><button onclick="navegar('menu')" aria-label="Dashboard" class="menu-btn">Dashboard</button></li>
+        <li><button onclick="navegar('incluir')" aria-label="Incluir Protocolo" class="menu-btn">Incluir Protocolo</button></li>
+        <li><button onclick="navegar('buscar')" aria-label="Buscar Protocolo" class="menu-btn">Buscar Protocolo</button></li>
+        <li><button onclick="navegar('editar')" aria-label="Editar Protocolo" class="menu-btn">Editar Protocolo</button></li>
+        <li><button onclick="navegar('atencao')" aria-label="Protocolos Atenção" class="menu-btn attention">Atenção! Em ATRASO</button></li>
+        <li><button onclick="navegar('exigencias-pendentes')" aria-label="Exigências e Pendentes" class="menu-btn warn">Exigências / Pendentes</button></li>
+        <li><button id="btn-cadastrar-usuario" onclick="navegar('usuario')" style="display:none" aria-label="Cadastrar Usuário" class="menu-btn">Cadastrar Usuário</button></li>
+        <li><button id="btn-categorias" onclick="navegar('categorias')" style="display:none" aria-label="Cadastro de Categorias" class="menu-btn">Cadastro de Categorias (Setores)</button></li>
+        <li><button onclick="navegar('backup')" aria-label="Backup" class="menu-btn secondary">Backup & Restaurar</button></li>
+        <li style="margin-top:20px;border-top:1px solid #eee;padding-top:15px;">
+          <button onclick="logout()" style="color:#fff;background:#e03; border:none;padding:10px;border-radius:8px;width:100%;cursor:pointer;" aria-label="Sair">SAIR</button>
+        </li>
+      </ul>
+    </nav>
+  </aside>
+
+  <main>
+    <div id="conteudo"></div>
+    <div id="loader" class="loader-overlay" aria-live="polite" style="display:none;">
+      <div class="loader"></div>
+      <span class="loader-msg" id="loader-msg">Carregando...</span>
+    </div>
+  </main>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      try {
+        const u = sessionStorage.getItem('sessao');
+        if (u) {
+          const s = JSON.parse(u);
+          document.getElementById('usuario-logado-short').textContent = s.usuario;
+        }
+      } catch {}
+    });
+  </script>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

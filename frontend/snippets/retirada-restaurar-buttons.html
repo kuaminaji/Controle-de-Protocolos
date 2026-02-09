@@ -1,0 +1,47 @@
+<!-- Exemplos de botões para acionar as novas rotas; ajuste IDs/atributos conforme seu HTML -->
+<button class="btn-retirada" data-id="{{PROTOCOLO_ID}}">Registrar retirada</button>
+
+<!-- Exiba somente quando status === 'EXCLUIDO' -->
+<button class="btn-restaurar" data-id="{{PROTOCOLO_ID}}">Restaurar</button>
+
+<script>
+document.addEventListener("click", async (ev) => {
+  const t = ev.target;
+
+  // Exemplo simples com prompt; substitua por seu modal/form
+  if (t.matches(".btn-retirada")) {
+    const id = t.dataset.id;
+    const nome = prompt("Nome de quem retirou:");
+    if (!nome) return;
+
+    const data = prompt('Data de retirada (YYYY-MM-DD):');
+    if (!data) return;
+
+    try {
+      await registrarRetirada(id, {
+        retirado_por: nome,
+        data_retirada: data,
+        usuario: window.usuarioLogado || ""
+      });
+      alert("Retirada registrada com sucesso.");
+      // Atualize a listagem/detalhe conforme seu app
+      // ex.: carregarProtocolos();
+    } catch (e) {
+      alert(e.message);
+    }
+  }
+
+  if (t.matches(".btn-restaurar")) {
+    const id = t.dataset.id;
+    if (!confirm("Confirmar restauração do protocolo?")) return;
+    try {
+      await restaurarProtocolo(id, { usuario: window.usuarioLogado || "" });
+      alert("Protocolo restaurado.");
+      // Atualize a listagem/detalhe
+      // ex.: carregarProtocolos();
+    } catch (e) {
+      alert(e.message);
+    }
+  }
+});
+</script>
