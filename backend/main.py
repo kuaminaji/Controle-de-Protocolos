@@ -111,6 +111,7 @@ class ProtocoloModel(BaseModel):
     data_retirada: str = ""
     whatsapp_enviado_em: str = Field(default="", max_length=30, description="Data/hora do último envio WhatsApp")
     whatsapp_enviado_por: str = Field(default="", max_length=60, description="Usuário que enviou última mensagem WhatsApp")
+    data_concluido: str = Field(default="", max_length=30, description="Data/hora quando o protocolo foi marcado como concluído")
     exig1_retirada_por: str = Field(default="", max_length=60)
     exig1_data_retirada: str = Field(default="", max_length=10)
     exig1_reapresentada_por: str = Field(default="", max_length=60)
@@ -219,6 +220,7 @@ def create_indexes():
         protocolos_coll.create_index([("exig2_data_reapresentacao_dt", 1)])
         protocolos_coll.create_index([("exig3_data_retirada_dt", 1)])
         protocolos_coll.create_index([("exig3_data_reapresentacao_dt", 1)])
+        protocolos_coll.create_index([("data_concluido_dt", 1)])
         protocolos_coll.create_index([("categoria", 1), ("status", 1), ("data_criacao_dt", -1)])
         protocolos_coll.create_index([("status", 1), ("data_criacao_dt", -1)])
         protocolos_coll.create_index([("categoria", 1), ("data_criacao_dt", -1)])
@@ -728,6 +730,15 @@ def incluir_protocolo(protocolo: ProtocoloModel):
             novo[k] = novo.get(k, "") or ""
         novo.pop(f"exig{i}_data_retirada_dt", None)
         novo.pop(f"exig{i}_data_reapresentacao_dt", None)
+    
+    # Set data_concluido if protocol is created with status "Concluído"
+    if status == "Concluído":
+        novo["data_concluido"] = novo["ultima_alteracao_data"]
+        novo["data_concluido_dt"] = datetime.now(timezone.utc)
+    else:
+        novo["data_concluido"] = ""
+        novo.pop("data_concluido_dt", None)
+    
     novo["historico_alteracoes"] = [{
         "acao": "criar",
         "usuario": novo["ultima_alteracao_nome"],
@@ -1104,6 +1115,18 @@ def editar_protocolo(id: str, protocolo: dict):
                 unset_fields[f"exig{idx}_data_reapresentacao_dt"] = ""
     for i in (1, 2, 3):
         process_exigencia(i)
+    
+    # Check if status changed to "Concluído"
+    old_status = prot.get("status", "")
+    new_status = atualizacao.get("status", old_status)
+    if new_status == "Concluído" and old_status != "Concluído":
+        atualizacao["data_concluido"] = now_str()
+        atualizacao["data_concluido_dt"] = datetime.now(timezone.utc)
+    elif new_status != "Concluído" and "status" in atualizacao:
+        # If status is changed away from "Concluído", clear the data_concluido
+        atualizacao["data_concluido"] = ""
+        unset_fields["data_concluido_dt"] = ""
+    
     atualizacao["ultima_alteracao_data"] = now_str()
     atualizacao["ultima_alteracao_nome"] = protocolo.get("ultima_alteracao_nome", "") or ""
     atualizacao.pop("id", None)
@@ -1576,56 +1599,22 @@ def _serialize_doc(doc: Dict[str, Any]) -> Dict[str, Any]:
 @app.get("/api/protocolo/finalizados/{data}")
 def protocolos_finalizados_por_data(data: str):
     try:
-        data_obj = datetime.strptime(data, "%Y-%m-%d")
+        data_obj = datetime.strptime(data, "%Y-%m-%d").replace(tzinfo=timezone.utc)
         dia_iso = data_obj.strftime("%Y-%m-%d")
-        dia_br = data_obj.strftime("%d/%m/%Y")
 
-        def _ts_matches_day(ts: Any) -> bool:
-            s = str(ts or "").strip()
-            return bool(s) and (s.startswith(dia_iso) or s.startswith(dia_br))
-
-        def _status_concluido(val: Any) -> bool:
-            return str(val or "").strip().lower() in {"concluído", "concluido"}
-
+        # Query protocols with status "Concluído" where data_concluido matches the selected date
         candidatos = list(protocolos_coll.find({
             "status": {"$regex": "^conclu[íi]do$", "$options": "i"}
         }))
 
         saida = []
         for p in candidatos:
-            incluir = False
-
-            for ev in (p.get("historico_alteracoes") or []):
-                if not isinstance(ev, dict): 
-                    continue
-                ts = ev.get("timestamp") or ev.get("data") or ev.get("created_at")
-                for ch in (ev.get("changes") or []):
-                    if not isinstance(ch, dict):
-                        continue
-                    campo = str(ch.get("campo") or ch.get("field") or "").strip().lower()
-                    para = ch.get("para") if "para" in ch else ch.get("to")
-                    if campo == "status" and _status_concluido(para) and _ts_matches_day(ts):
-                        incluir = True
-                        break
-                if incluir:
-                    break
-
-            if not incluir:
-                for h in (p.get("historico") or []):
-                    if not isinstance(h, dict):
-                        continue
-                    data_h = h.get("data") or h.get("timestamp")
-                    acao = str(h.get("acao") or h.get("action") or "").lower()
-                    if _ts_matches_day(data_h) and ("status" in acao or "conclu" in acao):
-                        incluir = True
-                        break
-
-            if not incluir and _ts_matches_day(p.get("ultima_alteracao_data")):
-                incluir = True
-
-            if incluir:
+            data_concluido = p.get("data_concluido", "")
+            # Check if data_concluido starts with the selected date (ISO format)
+            if data_concluido and data_concluido.startswith(dia_iso):
                 p_out = {k: v for k, v in p.items() if k not in [
                     "_id", "data_criacao_dt", "data_retirada_dt", "historico_alteracoes",
+                    "data_concluido_dt",
                     "exig1_data_retirada_dt","exig1_data_reapresentacao_dt",
                     "exig2_data_retirada_dt","exig2_data_reapresentacao_dt",
                     "exig3_data_retirada_dt","exig3_data_reapresentacao_dt"

@@ -2316,8 +2316,8 @@ function navegar(pagina) {
             </div>
             <div style="width:220px;">
               <label>Número do Protocolo</label>
-              <input type="text" id="buscar-numero" maxlength="10" autocomplete="off" 
-                     inputmode="numeric" pattern="^[0-9]{1,10}$" placeholder="Ex: 12345" style="width:100%;">
+              <input type="text" id="buscar-numero" maxlength="5" minlength="5" autocomplete="off" 
+                     inputmode="numeric" pattern="^\\d{5}$" placeholder="00000" style="width:100%;">
             </div>
             <div style="width:200px;">
               <label>CPF do Requerente</label>
@@ -2497,7 +2497,7 @@ function navegar(pagina) {
           <div style="display:flex;gap:12px;flex-wrap:wrap;">
             <div style="width:260px;">
               <label>Número do Protocolo</label>
-              <input type="text" id="editar-numero" maxlength="10" inputmode="numeric" pattern="^[0-9]{1,10}$" style="width:100%;">
+              <input type="text" id="editar-numero" maxlength="5" minlength="5" inputmode="numeric" pattern="^\\d{5}$" placeholder="00000" style="width:100%;">
             </div>
             <div style="width:260px;">
               <label>CPF do Requerente</label>
