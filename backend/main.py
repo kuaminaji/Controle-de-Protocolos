@@ -197,6 +197,7 @@ usuarios_coll: Collection = db["usuarios"]
 filtros_coll: Collection = db["filtros"]
 notificacoes_coll: Collection = db["notificacoes"]
 categorias_coll: Collection = db["categorias"]
+protocolos_excluidos_coll: Collection = db["protocolos_excluidos"]
 
 def create_indexes():
     try:
@@ -1215,6 +1216,79 @@ def excluir_protocolo(id: str, usuario: str = Query(...)):
         logger.info(f"Protocolo {prot.get('numero', '')} excluído por {usuario}")
         return {"ok": True}
     raise HTTPException(status_code=404, detail="Protocolo não encontrado.")
+
+@app.post("/api/protocolo/{id}/excluir-definitivamente")
+def excluir_protocolo_definitivamente(id: str, body: dict = Body(...)):
+    """
+    Permanently delete a protocol from the database.
+    Only administrators can perform this action with password confirmation.
+    Creates an audit trail in protocolos_excluidos collection.
+    """
+    try:
+        oid = ObjectId(id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="ID inválido.")
+    
+    # Get and validate parameters
+    usuario = body.get("usuario", "").strip()
+    senha = body.get("senha", "").strip()
+    
+    if not usuario or not senha:
+        raise HTTPException(status_code=400, detail="Usuário e senha são obrigatórios.")
+    
+    # Verify user is admin
+    user = usuarios_coll.find_one({"usuario": usuario})
+    if not user:
+        raise HTTPException(status_code=403, detail="Usuário não encontrado.")
+    
+    if user.get("tipo") != "admin":
+        raise HTTPException(status_code=403, detail="Apenas administradores podem excluir definitivamente protocolos.")
+    
+    # Verify password
+    senha_hash = user.get("senha", "")
+    if not verify_password(senha, senha_hash):
+        raise HTTPException(status_code=403, detail="Senha incorreta.")
+    
+    # Get protocol to delete
+    prot = protocolos_coll.find_one({"_id": oid})
+    if not prot:
+        raise HTTPException(status_code=404, detail="Protocolo não encontrado.")
+    
+    # Create audit trail in protocolos_excluidos collection
+    audit_data = {
+        "protocolo_original": prot,  # Complete protocol backup
+        "protocolo_id_original": str(prot["_id"]),
+        "numero": prot.get("numero", ""),
+        "nome_requerente": prot.get("nome_requerente", ""),
+        "cpf": prot.get("cpf", ""),
+        "exclusao_timestamp": now_str(),
+        "exclusao_timestamp_dt": datetime.now(timezone.utc),
+        "admin_responsavel": usuario,
+        "motivo": body.get("motivo", "Exclusão definitiva solicitada por administrador")
+    }
+    
+    try:
+        # Insert audit trail
+        protocolos_excluidos_coll.insert_one(audit_data)
+        logger.info(f"Audit trail criado para protocolo {prot.get('numero', '')} excluído definitivamente")
+        
+        # Delete from main collection
+        result = protocolos_coll.delete_one({"_id": oid})
+        
+        if result.deleted_count == 1:
+            logger.info(f"Protocolo {prot.get('numero', '')} excluído definitivamente por {usuario}")
+            return {
+                "ok": True,
+                "message": "Protocolo excluído definitivamente com sucesso. Registro de auditoria criado.",
+                "audit_id": str(audit_data.get("_id"))
+            }
+        else:
+            raise HTTPException(status_code=404, detail="Protocolo não encontrado para exclusão.")
+            
+    except Exception as e:
+        logger.error(f"Erro ao excluir definitivamente protocolo: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erro ao excluir protocolo: {str(e)}")
+
 
 # ====================== [BLOCO 15: ATENÇÃO / AUTOPREENCHIMENTO] ======================
 @app.get("/api/protocolo/atencao")

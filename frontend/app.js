@@ -3397,6 +3397,7 @@ function montarFormularioEditar(p) {
         <button type="button" id="voltar-menu-editar-form">← Voltar ao Menu</button>
         <button type="button" onclick="this.form.reset();">🔄 Limpar</button>
         <button type="button" id="btn-ver-historico">📋 Ver histórico</button>
+        ${isAdmin ? `<button type="button" id="btn-excluir-definitivamente" style="background:#dc3545;color:white;">🗑️ Excluir Definitivamente</button>` : ''}
       </div>
     </form>
     <div id="historico-lista" style="margin-top:20px;"></div>
@@ -3630,6 +3631,61 @@ function montarFormularioEditar(p) {
   
   document.getElementById("btn-ver-historico").onclick = () => verHistorico(p.id);
   document.getElementById("voltar-menu-editar-form").onclick = menuInicial;
+  
+  // Handler for permanent delete (admin only)
+  if (isAdmin) {
+    const btnExcluirDef = document.getElementById("btn-excluir-definitivamente");
+    if (btnExcluirDef) {
+      btnExcluirDef.onclick = async function() {
+        // First confirmation
+        if (!confirm(`⚠️ ATENÇÃO: Esta ação é IRREVERSÍVEL!\n\nVocê está prestes a EXCLUIR DEFINITIVAMENTE o protocolo:\n\nNúmero: ${p.numero}\nRequerente: ${p.nome_requerente}\nCPF: ${formatCpf(p.cpf)}\n\nEste protocolo será REMOVIDO permanentemente do banco de dados.\nUm registro de auditoria será criado.\n\nDeseja realmente continuar?`)) {
+          return;
+        }
+        
+        // Second confirmation with password
+        const senha = prompt("🔐 Digite sua senha de administrador para confirmar a exclusão definitiva:");
+        if (!senha) {
+          mostrarMensagem("Exclusão cancelada.", "info");
+          return;
+        }
+        
+        // Optional reason for deletion
+        const motivo = prompt("📝 (Opcional) Motivo da exclusão definitiva:", "Exclusão definitiva solicitada por administrador");
+        
+        mostrarLoader("Excluindo protocolo definitivamente...");
+        
+        try {
+          const resp = await fetchWithAuth(`/api/protocolo/${p.id}/excluir-definitivamente`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+              usuario: sessao.usuario,
+              senha: senha,
+              motivo: motivo || "Exclusão definitiva solicitada por administrador"
+            })
+          });
+          
+          esconderLoader();
+          
+          if (resp.ok) {
+            const result = await resp.json();
+            mostrarMensagem('✅ Protocolo excluído definitivamente com sucesso! Registro de auditoria criado.', 'sucesso', 5000);
+            // Navigate back to menu after successful deletion
+            setTimeout(() => {
+              navegar('menu');
+            }, 2000);
+          } else {
+            const erro = await resp.json().catch(() => ({}));
+            mostrarMensagem(erro.detail || 'Erro ao excluir protocolo definitivamente!', 'erro', 5000);
+          }
+        } catch (error) {
+          esconderLoader();
+          console.error('Erro ao excluir definitivamente:', error);
+          mostrarMensagem('Falha ao conectar ao servidor.', 'erro');
+        }
+      };
+    }
+  }
 }
 
 // ====================== [BLOCO 21: HISTÓRICO DETALHADO] ====================== //
