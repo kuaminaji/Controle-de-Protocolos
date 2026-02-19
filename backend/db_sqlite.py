@@ -247,7 +247,22 @@ class CollectionAdapter:
         Convert string dates to datetime objects for Protocolo model.
         MongoDB backups may only have string date fields, but SQLite needs datetime objects.
         Also converts string values in _dt fields to datetime objects.
+        Also normalizes status field to ensure proper counting of finalized protocols.
         """
+        # STEP 0: Normalize status field
+        # MongoDB backups may have status in different variations:
+        # "Concluído", "concluído", "Concluido", "concluido", etc.
+        # The statistics query expects exactly "Concluído" (capital C, with accent)
+        if 'status' in document:
+            status = document['status']
+            if status and isinstance(status, str):
+                # Check if this is any variation of "concluído" (case-insensitive, with or without accent)
+                status_lower = status.lower().strip()
+                if status_lower in {'concluído', 'concluido'}:
+                    # Normalize to the exact format expected by statistics queries
+                    document['status'] = 'Concluído'
+                    logger.info(f"Normalized status from '{status}' to 'Concluído'")
+        
         # List of ALL datetime fields in Protocolo model
         all_dt_fields = [
             'data_criacao_dt',
