@@ -235,6 +235,44 @@ class CollectionAdapter:
         
         return InsertResult(obj.id)
     
+    def insert_many(self, documents):
+        """Insert multiple documents in batch"""
+        if not documents:
+            # Return empty result for empty list
+            class InsertManyResult:
+                def __init__(self, inserted_ids):
+                    self.inserted_ids = inserted_ids
+            return InsertManyResult([])
+        
+        inserted_ids = []
+        objects = []
+        try:
+            # Create all objects and add to session
+            for document in documents:
+                obj = self.model(**document)
+                self.session.add(obj)
+                objects.append(obj)
+            
+            # Commit all at once for efficiency
+            self.session.commit()
+            
+            # After commit, get the IDs from the objects
+            # The IDs are automatically populated by SQLAlchemy
+            for obj in objects:
+                if hasattr(obj, 'id') and obj.id is not None:
+                    inserted_ids.append(obj.id)
+            
+            # Return MongoDB-like result
+            class InsertManyResult:
+                def __init__(self, inserted_ids):
+                    self.inserted_ids = inserted_ids
+            
+            return InsertManyResult(inserted_ids)
+        except Exception as e:
+            self.session.rollback()
+            logger.error(f"Error in insert_many: {e}")
+            raise
+    
     def find_one(self, filter_dict=None):
         """Find a single document"""
         query = self.session.query(self.model)
