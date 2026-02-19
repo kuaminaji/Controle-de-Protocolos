@@ -24,31 +24,15 @@ try:
     import bcrypt  # type: ignore
 except ImportError:
     bcrypt = None
-
-# Database adapter - supports both MongoDB and SQLite
-from db_adapter import get_db_collections, create_indexes_for_db, get_object_id_class, convert_id_for_response
-
-# Conditional imports based on DB_TYPE
-DB_TYPE = os.getenv("DB_TYPE", "sqlite").lower()
-
-if DB_TYPE == "mongodb":
-    from bson import ObjectId
-    from bson.json_util import dumps as bson_dumps, loads as bson_loads
-    from pymongo import MongoClient, errors
-    from pymongo.collection import Collection
-    from pymongo import ASCENDING, DESCENDING
-else:
-    # Use adapter's ObjectId replacement
-    ObjectId = get_object_id_class()
-    bson_dumps = lambda x: json.dumps(x)
-    bson_loads = lambda x: json.loads(x)
-    ASCENDING = 1
-    DESCENDING = -1
-
+from bson import ObjectId
+from bson.json_util import dumps as bson_dumps, loads as bson_loads
 from fastapi import FastAPI, HTTPException, Query, Body, Request, Depends, UploadFile, File, status
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator, ValidationError
+from pymongo import MongoClient, errors
+from pymongo.collection import Collection
+from pymongo import ASCENDING, DESCENDING
 
 # ====================== [BLOCO 2: CONFIGURAÇÃO DE LOGGING] ======================
 logging.basicConfig(
@@ -205,21 +189,18 @@ class CategoriaModel(BaseModel):
         return v2
 
 # ====================== [BLOCO 5: CONFIGURAÇÃO DO BANCO E ÍNDICES] ======================
-# Initialize database collections using adapter
-_db_collections = get_db_collections()
-protocolos_coll = _db_collections['protocolos_coll']
-usuarios_coll = _db_collections['usuarios_coll']
-filtros_coll = _db_collections['filtros_coll']
-notificacoes_coll = _db_collections['notificacoes_coll']
-categorias_coll = _db_collections['categorias_coll']
-protocolos_excluidos_coll = _db_collections['protocolos_excluidos_coll']
+MONGO_URL = os.getenv("MONGO_URL", "mongodb://localhost:27017/")
+DB_NAME = os.getenv("DB_NAME", "protocolos_db")
+client = criar_cliente_mongodb(MONGO_URL)
+db = client[DB_NAME]
+protocolos_coll: Collection = db["protocolos"]
+usuarios_coll: Collection = db["usuarios"]
+filtros_coll: Collection = db["filtros"]
+notificacoes_coll: Collection = db["notificacoes"]
+categorias_coll: Collection = db["categorias"]
+protocolos_excluidos_coll: Collection = db["protocolos_excluidos"]
 
 def create_indexes():
-    # Use adapter's create_indexes function
-    create_indexes_for_db(_db_collections)
-    return
-
-def create_indexes_old():
     try:
         usuarios_coll.create_index("usuario", unique=True)
     except Exception as e:
@@ -252,7 +233,6 @@ def create_indexes_old():
         categorias_coll.create_index("nome", unique=True)
     except Exception as e:
         logger.warning(f"[MongoDB] Aviso ao criar índice de categorias: {e}")
-    # Old MongoDB index creation - replaced by adapter
 
 # ====================== [BLOCO 6: GESTÃO DE SENHAS] ======================
 PBKDF2_ALG = "pbkdf2_sha256"
