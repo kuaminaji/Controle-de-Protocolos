@@ -249,7 +249,10 @@ class CollectionAdapter:
         try:
             # Create all objects and add to session
             for document in documents:
-                obj = self.model(**document)
+                # Remove MongoDB-specific fields (_id) before creating SQLAlchemy model
+                # MongoDB uses _id, SQLAlchemy uses id (auto-generated)
+                clean_doc = {k: v for k, v in document.items() if k != '_id'}
+                obj = self.model(**clean_doc)
                 self.session.add(obj)
                 objects.append(obj)
             
