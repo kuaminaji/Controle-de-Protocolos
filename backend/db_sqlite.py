@@ -239,6 +239,7 @@ class CollectionAdapter:
         """
         Convert string dates to datetime objects for Protocolo model.
         MongoDB backups may only have string date fields, but SQLite needs datetime objects.
+        Also converts string values in _dt fields to datetime objects.
         """
         # List of (string_field, datetime_field) pairs
         date_fields = [
@@ -254,8 +255,32 @@ class CollectionAdapter:
         ]
         
         for str_field, dt_field in date_fields:
+            # Check if _dt field has a string value (needs conversion)
+            dt_value = document.get(dt_field)
+            if dt_value is not None and isinstance(dt_value, str):
+                # _dt field contains a string, need to convert to datetime
+                if dt_value.strip():  # Not empty
+                    try:
+                        # Try datetime format (YYYY-MM-DD HH:MM:SS)
+                        dt_obj = datetime.strptime(dt_value, '%Y-%m-%d %H:%M:%S')
+                        document[dt_field] = dt_obj
+                        logger.info(f"Converted string '{dt_value}' to datetime for field '{dt_field}'")
+                    except (ValueError, TypeError):
+                        # Try date format (YYYY-MM-DD)
+                        try:
+                            dt_obj = datetime.strptime(dt_value, '%Y-%m-%d')
+                            document[dt_field] = dt_obj
+                            logger.info(f"Converted string '{dt_value}' to datetime for field '{dt_field}'")
+                        except (ValueError, TypeError):
+                            # If both fail, log warning and set to None
+                            logger.warning(f"Could not parse datetime string '{dt_value}' for field '{dt_field}', setting to None")
+                            document[dt_field] = None
+                else:
+                    # Empty string, set to None
+                    document[dt_field] = None
+            
             # If datetime field is missing or None, but string field exists
-            if (dt_field not in document or document.get(dt_field) is None) and str_field in document:
+            elif (dt_field not in document or document.get(dt_field) is None) and str_field in document:
                 str_date = document.get(str_field)
                 if str_date and str_date.strip():  # Not empty
                     try:
