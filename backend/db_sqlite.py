@@ -235,6 +235,48 @@ class CollectionAdapter:
         
         return InsertResult(obj.id)
     
+    def _prepare_protocolo_dates(self, document):
+        """
+        Convert string dates to datetime objects for Protocolo model.
+        MongoDB backups may only have string date fields, but SQLite needs datetime objects.
+        """
+        # List of (string_field, datetime_field) pairs
+        date_fields = [
+            ('data_criacao', 'data_criacao_dt'),
+            ('data_retirada', 'data_retirada_dt'),
+            ('data_concluido', 'data_concluido_dt'),
+            ('exig1_data_retirada', 'exig1_data_retirada_dt'),
+            ('exig1_data_reapresentacao', 'exig1_data_reapresentacao_dt'),
+            ('exig2_data_retirada', 'exig2_data_retirada_dt'),
+            ('exig2_data_reapresentacao', 'exig2_data_reapresentacao_dt'),
+            ('exig3_data_retirada', 'exig3_data_retirada_dt'),
+            ('exig3_data_reapresentacao', 'exig3_data_reapresentacao_dt'),
+        ]
+        
+        for str_field, dt_field in date_fields:
+            # If datetime field is missing or None, but string field exists
+            if (dt_field not in document or document.get(dt_field) is None) and str_field in document:
+                str_date = document.get(str_field)
+                if str_date and str_date.strip():  # Not empty
+                    try:
+                        # Try to parse the date string (format: YYYY-MM-DD)
+                        dt_obj = datetime.strptime(str_date, '%Y-%m-%d')
+                        document[dt_field] = dt_obj
+                    except (ValueError, TypeError) as e:
+                        # If parsing fails, try datetime format (YYYY-MM-DD HH:MM:SS)
+                        try:
+                            dt_obj = datetime.strptime(str_date, '%Y-%m-%d %H:%M:%S')
+                            document[dt_field] = dt_obj
+                        except (ValueError, TypeError):
+                            # If both fail, log warning and skip
+                            logger.warning(f"Could not parse date '{str_date}' for field '{str_field}'")
+                            # For required fields like data_criacao_dt, set to current datetime
+                            if dt_field == 'data_criacao_dt':
+                                document[dt_field] = datetime.now()
+                                logger.info(f"Set {dt_field} to current datetime as fallback")
+        
+        return document
+    
     def insert_many(self, documents):
         """Insert multiple documents in batch"""
         if not documents:
@@ -252,6 +294,12 @@ class CollectionAdapter:
                 # Remove MongoDB-specific fields (_id) before creating SQLAlchemy model
                 # MongoDB uses _id, SQLAlchemy uses id (auto-generated)
                 clean_doc = {k: v for k, v in document.items() if k != '_id'}
+                
+                # Convert string dates to datetime objects for Protocolo model
+                # MongoDB backups may not have _dt fields, so we need to generate them
+                if self.model.__tablename__ == 'protocolos':
+                    clean_doc = self._prepare_protocolo_dates(clean_doc)
+                
                 obj = self.model(**clean_doc)
                 self.session.add(obj)
                 objects.append(obj)
