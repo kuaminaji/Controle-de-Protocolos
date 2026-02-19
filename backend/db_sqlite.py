@@ -245,14 +245,14 @@ class CollectionAdapter:
         result = query.first()
         return self._to_dict(result) if result else None
     
-    def find(self, filter_dict=None):
+    def find(self, filter_dict=None, projection=None):
         """Find multiple documents - returns a cursor-like object"""
         query = self.session.query(self.model)
         
         if filter_dict:
             query = self._apply_filters(query, filter_dict)
         
-        return QueryCursor(query, self._to_dict)
+        return QueryCursor(query, self._to_dict, projection=projection)
     
     def update_one(self, filter_dict, update_dict):
         """Update a single document"""
@@ -404,9 +404,10 @@ class CollectionAdapter:
 class QueryCursor:
     """Cursor-like object for query results"""
     
-    def __init__(self, query, to_dict_func):
+    def __init__(self, query, to_dict_func, projection=None):
         self.query = query
         self.to_dict = to_dict_func
+        self.projection = projection
         self._results = None
     
     def sort(self, key, direction=1):
@@ -436,16 +437,48 @@ class QueryCursor:
         self.query = self.query.limit(count)
         return self
     
+    def _apply_projection(self, doc):
+        """Apply MongoDB-style projection to document"""
+        if not self.projection:
+            return doc
+        
+        result = {}
+        include_fields = []
+        exclude_id = False
+        
+        # Determine which fields to include/exclude
+        for field, value in self.projection.items():
+            if field == "_id" and value == 0:
+                exclude_id = True
+            elif value == 1:
+                include_fields.append(field)
+        
+        # If specific fields are included, only include those
+        if include_fields:
+            for field in include_fields:
+                if field in doc:
+                    result[field] = doc[field]
+            # Include _id by default unless explicitly excluded
+            if not exclude_id and "_id" in doc:
+                result["_id"] = doc["_id"]
+        else:
+            # Otherwise, include all except excluded
+            result = doc.copy()
+            if exclude_id and "_id" in result:
+                del result["_id"]
+        
+        return result
+    
     def __iter__(self):
         """Iterate over results"""
         if self._results is None:
-            self._results = [self.to_dict(obj) for obj in self.query.all()]
+            self._results = [self._apply_projection(self.to_dict(obj)) for obj in self.query.all()]
         return iter(self._results)
     
     def __list__(self):
         """Convert to list"""
         if self._results is None:
-            self._results = [self.to_dict(obj) for obj in self.query.all()]
+            self._results = [self._apply_projection(self.to_dict(obj)) for obj in self.query.all()]
         return self._results
 
 

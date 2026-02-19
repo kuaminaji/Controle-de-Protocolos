@@ -66,7 +66,7 @@ if not exist "backend\requirements.txt" (
     exit /b 1
 )
 
-echo [1/6] Criando ambiente virtual...
+echo [1/7] Criando ambiente virtual...
 python -m venv venv
 if errorlevel 1 (
     echo ERRO: Falha ao criar ambiente virtual
@@ -76,7 +76,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo [2/6] Ativando ambiente virtual...
+echo [2/7] Ativando ambiente virtual...
 call venv\Scripts\activate.bat
 if errorlevel 1 (
     echo ERRO: Falha ao ativar ambiente virtual
@@ -84,13 +84,13 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo [3/6] Atualizando pip...
+echo [3/7] Atualizando pip...
 python -m pip install --upgrade pip
 if errorlevel 1 (
     echo AVISO: Falha ao atualizar pip (continuando...)
 )
 
-echo [4/6] Instalando dependencias do backend...
+echo [4/7] Instalando dependencias do backend...
 echo Instalando de: %CD%\backend\requirements.txt
 pip install -r backend\requirements.txt
 if errorlevel 1 (
@@ -100,7 +100,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo [5/6] Configurando arquivo .env...
+echo [5/7] Configurando arquivo .env...
 if not exist ".env" (
     if exist ".env.example" (
         echo Criando arquivo .env a partir do .env.example...
@@ -127,7 +127,21 @@ if not exist ".env" (
     echo Arquivo .env ja existe
 )
 
-echo [6/6] Criando usuario administrador padrao...
+echo.
+echo [6/7] Inicializando banco de dados SQLite...
+echo Executando: python backend\init_db.py
+python backend\init_db.py
+if errorlevel 1 (
+    echo.
+    echo AVISO: Problema ao inicializar banco de dados
+    echo A instalacao continuara, mas pode haver problemas...
+    timeout /t 3 > nul
+) else (
+    echo Banco de dados inicializado com sucesso!
+)
+
+echo.
+echo [7/7] Criando usuario administrador padrao...
 echo Executando: python backend\cria_admin.py
 python backend\cria_admin.py
 if errorlevel 1 (
