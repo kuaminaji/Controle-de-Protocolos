@@ -222,8 +222,15 @@ class CollectionAdapter:
     
     def insert_one(self, document):
         """Insert a single document"""
+        # Remove MongoDB-specific fields before creating SQLAlchemy model
+        clean_doc = {k: v for k, v in document.items() if k != '_id'}
+        
+        # Convert dates for Protocolo model (handles empty strings and invalid values)
+        if self.model.__tablename__ == 'protocolos':
+            clean_doc = self._prepare_protocolo_dates(clean_doc)
+        
         # Convert dict to model instance
-        obj = self.model(**document)
+        obj = self.model(**clean_doc)
         self.session.add(obj)
         self.session.commit()
         self.session.refresh(obj)
@@ -241,7 +248,51 @@ class CollectionAdapter:
         MongoDB backups may only have string date fields, but SQLite needs datetime objects.
         Also converts string values in _dt fields to datetime objects.
         """
-        # List of (string_field, datetime_field) pairs
+        # List of ALL datetime fields in Protocolo model
+        all_dt_fields = [
+            'data_criacao_dt',
+            'data_retirada_dt',
+            'data_concluido_dt',
+            'exig1_data_retirada_dt',
+            'exig1_data_reapresentacao_dt',
+            'exig2_data_retirada_dt',
+            'exig2_data_reapresentacao_dt',
+            'exig3_data_retirada_dt',
+            'exig3_data_reapresentacao_dt',
+        ]
+        
+        # FIRST PASS: Clean all datetime fields - convert any non-datetime values to None or proper datetime
+        for dt_field in all_dt_fields:
+            if dt_field in document:
+                dt_value = document[dt_field]
+                # If value is a string (empty or not), we need to handle it
+                if isinstance(dt_value, str):
+                    if dt_value.strip():  # Non-empty string
+                        try:
+                            # Try datetime format (YYYY-MM-DD HH:MM:SS)
+                            dt_obj = datetime.strptime(dt_value, '%Y-%m-%d %H:%M:%S')
+                            document[dt_field] = dt_obj
+                            logger.info(f"Converted string '{dt_value}' to datetime for field '{dt_field}'")
+                        except (ValueError, TypeError):
+                            # Try date format (YYYY-MM-DD)
+                            try:
+                                dt_obj = datetime.strptime(dt_value, '%Y-%m-%d')
+                                document[dt_field] = dt_obj
+                                logger.info(f"Converted string '{dt_value}' to datetime for field '{dt_field}'")
+                            except (ValueError, TypeError):
+                                # If both fail, log warning and set to None
+                                logger.warning(f"Could not parse datetime string '{dt_value}' for field '{dt_field}', setting to None")
+                                document[dt_field] = None
+                    else:
+                        # Empty string, set to None
+                        logger.info(f"Converting empty string to None for field '{dt_field}'")
+                        document[dt_field] = None
+                # If it's not a datetime object and not None and not string, it's invalid
+                elif dt_value is not None and not isinstance(dt_value, datetime):
+                    logger.warning(f"Field '{dt_field}' has invalid type {type(dt_value)}, setting to None")
+                    document[dt_field] = None
+        
+        # SECOND PASS: List of (string_field, datetime_field) pairs for populating missing datetimes from string fields
         date_fields = [
             ('data_criacao', 'data_criacao_dt'),
             ('data_retirada', 'data_retirada_dt'),
@@ -254,51 +305,30 @@ class CollectionAdapter:
             ('exig3_data_reapresentacao', 'exig3_data_reapresentacao_dt'),
         ]
         
+        # If datetime field is still missing or None after first pass, try to populate from string field
         for str_field, dt_field in date_fields:
-            # Check if _dt field has a string value (needs conversion)
-            dt_value = document.get(dt_field)
-            if dt_value is not None and isinstance(dt_value, str):
-                # _dt field contains a string, need to convert to datetime
-                if dt_value.strip():  # Not empty
-                    try:
-                        # Try datetime format (YYYY-MM-DD HH:MM:SS)
-                        dt_obj = datetime.strptime(dt_value, '%Y-%m-%d %H:%M:%S')
-                        document[dt_field] = dt_obj
-                        logger.info(f"Converted string '{dt_value}' to datetime for field '{dt_field}'")
-                    except (ValueError, TypeError):
-                        # Try date format (YYYY-MM-DD)
-                        try:
-                            dt_obj = datetime.strptime(dt_value, '%Y-%m-%d')
-                            document[dt_field] = dt_obj
-                            logger.info(f"Converted string '{dt_value}' to datetime for field '{dt_field}'")
-                        except (ValueError, TypeError):
-                            # If both fail, log warning and set to None
-                            logger.warning(f"Could not parse datetime string '{dt_value}' for field '{dt_field}', setting to None")
-                            document[dt_field] = None
-                else:
-                    # Empty string, set to None
-                    document[dt_field] = None
-            
-            # If datetime field is missing or None, but string field exists
-            elif (dt_field not in document or document.get(dt_field) is None) and str_field in document:
+            if (dt_field not in document or document.get(dt_field) is None) and str_field in document:
                 str_date = document.get(str_field)
-                if str_date and str_date.strip():  # Not empty
+                if str_date and isinstance(str_date, str) and str_date.strip():  # Not empty
                     try:
                         # Try to parse the date string (format: YYYY-MM-DD)
                         dt_obj = datetime.strptime(str_date, '%Y-%m-%d')
                         document[dt_field] = dt_obj
-                    except (ValueError, TypeError) as e:
+                        logger.info(f"Populated {dt_field} from {str_field}: '{str_date}'")
+                    except (ValueError, TypeError):
                         # If parsing fails, try datetime format (YYYY-MM-DD HH:MM:SS)
                         try:
                             dt_obj = datetime.strptime(str_date, '%Y-%m-%d %H:%M:%S')
                             document[dt_field] = dt_obj
+                            logger.info(f"Populated {dt_field} from {str_field}: '{str_date}'")
                         except (ValueError, TypeError):
                             # If both fail, log warning and skip
-                            logger.warning(f"Could not parse date '{str_date}' for field '{str_field}'")
-                            # For required fields like data_criacao_dt, set to current datetime
-                            if dt_field == 'data_criacao_dt':
-                                document[dt_field] = datetime.now()
-                                logger.info(f"Set {dt_field} to current datetime as fallback")
+                            logger.warning(f"Could not parse date '{str_date}' from field '{str_field}'")
+        
+        # THIRD PASS: Ensure required field has a value
+        if 'data_criacao_dt' not in document or document.get('data_criacao_dt') is None:
+            document['data_criacao_dt'] = datetime.now()
+            logger.info(f"Set data_criacao_dt to current datetime as fallback")
         
         return document
     
