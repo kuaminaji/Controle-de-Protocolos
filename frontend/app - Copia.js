@@ -1098,7 +1098,6 @@ async function carregarSistema() {
   document.getElementById("usuario-tipo").innerText = sessao.tipo;
   document.getElementById("btn-cadastrar-usuario").style.display = sessao.tipo === "admin" ? "" : "none";
   document.getElementById("btn-categorias").style.display = sessao.tipo === "admin" ? "" : "none";
-  document.getElementById("btn-auditoria").style.display = sessao.tipo === "admin" ? "" : "none";
   document.getElementById("btn-backup").style.display = sessao.tipo === "admin" ? "" : "none";
   
   // update topbar short user if present
@@ -1206,8 +1205,6 @@ async function verificarAtrasos() {
   }
 }
 
-let batchProtocolosCache = [];
-
 // Function to verify and send WhatsApp to finished protocols
 async function verificarProtocolosFinalizados() {
   const dateInput = document.getElementById('batch-whatsapp-date');
@@ -1308,7 +1305,7 @@ async function verificarProtocolosFinalizados() {
             </div>
             <small id="batch-progress-text" style="color:#666;margin-top:4px;display:block;">Pronto para iniciar</small>
           </div>
-          <button id="btn-start-batch"  
+          <button id="btn-start-batch" onclick="iniciarEnvioEmLote(${JSON.stringify(comWhatsapp).replace(/"/g, '&quot;')})" 
                   style="background:#25d366;color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-weight:600;">
             🚀 Iniciar Envio
           </button>
@@ -1317,10 +1314,7 @@ async function verificarProtocolosFinalizados() {
     `;
     
     resultsDiv.innerHTML = html;
-    batchProtocolosCache = comWhatsapp;
-    const btnStartBatch = document.getElementById('btn-start-batch');
-    if (btnStartBatch) btnStartBatch.onclick = () => iniciarEnvioEmLote(batchProtocolosCache);
-
+    
   } catch (error) {
     console.error('Erro ao verificar protocolos:', error);
     resultsDiv.innerHTML = `
@@ -1336,74 +1330,143 @@ async function iniciarEnvioEmLote(protocolos) {
   const btnStart = document.getElementById('btn-start-batch');
   const progressBar = document.getElementById('batch-progress-bar');
   const progressText = document.getElementById('batch-progress-text');
-
-  if (!btnStart || !progressBar || !progressText) return mostrarMensagem('Erro: elementos não encontrados', 'erro');
-  if (!Array.isArray(protocolos) || protocolos.length === 0) return mostrarMensagem('Nenhum protocolo para envio.', 'info');
-
+  
+  if (!btnStart || !progressBar || !progressText) {
+    mostrarMensagem('Erro: elementos não encontrados', 'erro');
+    return;
+  }
+  
+  // Disable button
   btnStart.disabled = true;
   btnStart.style.opacity = '0.6';
   btnStart.style.cursor = 'not-allowed';
-  btnStart.textContent = '⏳ Aguardando confirmações...';
-
+  btnStart.textContent = '⏳ Enviando...';
+  
   const sessao = getSessao();
   const usuarioLogado = sessao?.usuario || 'Atendente';
-
-  let enviados = 0, pulados = 0, erros = 0;
-
+  
+  let enviados = 0;
+  let pulados = 0;
+  let erros = 0;
+  
   for (let i = 0; i < protocolos.length; i++) {
     const p = protocolos[i];
     const statusDiv = document.getElementById(`batch-status-${i}`);
-    progressBar.style.width = `${Math.round((i / protocolos.length) * 100)}%`;
-    progressText.textContent = `Aguardando confirmação ${i + 1} de ${protocolos.length}...`;
-
+    
+    // Update progress
+    const progresso = Math.round(((i + 1) / protocolos.length) * 100);
+    progressBar.style.width = `${progresso}%`;
+    progressText.textContent = `Processando ${i + 1} de ${protocolos.length}...`;
+    
+    // Check if already sent
     if (p.whatsapp_enviado_em) {
       pulados++;
-      if (statusDiv) { statusDiv.style.background = '#e3f2fd'; statusDiv.style.color = '#1976d2'; statusDiv.textContent = `⏩ Pulado (já enviado em ${p.whatsapp_enviado_em})`; }
+      if (statusDiv) {
+        statusDiv.style.background = '#e3f2fd';
+        statusDiv.style.color = '#1976d2';
+        statusDiv.textContent = `⏩ Pulado (já enviado em ${p.whatsapp_enviado_em})`;
+      }
       continue;
     }
-
-    const ok = confirm(`Enviar WhatsApp agora?\n\nProtocolo: ${p.numero}\nCliente: ${p.nome_requerente || '-'}\nWhatsApp: ${p.whatsapp || '-'}`);
-    if (!ok) {
-      progressText.textContent = `⏸️ Envio pausado no item ${i + 1}/${protocolos.length}.`;
-      btnStart.disabled = false; btnStart.style.opacity = '1'; btnStart.style.cursor = 'pointer'; btnStart.textContent = '▶️ Continuar Envio';
-      btnStart.onclick = () => iniciarEnvioEmLote(protocolos.slice(i));
-      return;
+    
+    // Show sending status
+    if (statusDiv) {
+      statusDiv.style.background = '#fff3e0';
+      statusDiv.style.color = '#f57c00';
+      statusDiv.textContent = '📤 Enviando...';
     }
-
-    if (statusDiv) { statusDiv.style.background = '#fff3e0'; statusDiv.style.color = '#f57c00'; statusDiv.textContent = '📤 Enviando...'; }
-
+    
     try {
+      // Prepare WhatsApp message
       const nomeRequerente = p.nome_requerente;
       const nomeParteAto = p.nome_parte_ato || nomeRequerente;
       const numero = p.numero;
       const status = p.status || 'Concluído';
-      const raw = String(p.whatsapp || '').replace(/\D/g, '');
-      const telFinal = (raw.length === 10 || raw.length === 11) ? `55${raw}` : raw;
-      const mensagem = encodeURIComponent(`Olá, Sr.(a) *${nomeRequerente}*\n\nO 📋 *Protocolo ${numero}*, em nome de: *${nomeParteAto}*, está com 📊 Status: ${status}.\n\nPara retirar seu pedido é preciso apresentar o *protocolo original*, caso tenha perdido apenas o requerente poderá retirar.\n\nAtenciosamente\n${usuarioLogado}`);
-      window.location.href = `whatsapp://send?phone=${telFinal}&text=${mensagem}`;
-
+      const whatsappNumber = p.whatsapp;
+      
+      const mensagem = encodeURIComponent(
+        `Olá, Sr.(a) *${nomeRequerente}*\n\n` +
+        `O 📋 *Protocolo ${numero}*, em nome de: *${nomeParteAto}*, está com 📊 Status: ${status}.\n\n` +
+        `Para retirar seu pedido é preciso apresentar o *protocolo original*, caso tenha perdido apenas o requerente poderá retirar.\n\n` +
+        `Atenciosamente\n${usuarioLogado}`
+      );
+      
+      const whatsappUrl = `whatsapp://send?phone=${encodeURIComponent(whatsappNumber.replace(/\D/g, ''))}&text=${mensagem}`;
+      
+      // Open WhatsApp
+      window.open(whatsappUrl, '_blank');
+      
+      // Update protocol with send timestamp
       const agora = new Date();
-      const dataFormatada = agora.toLocaleString('pt-BR', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'});
-      const respUpdate = await fetchWithAuth(`/api/protocolo/${p.id}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({whatsapp_enviado_em:dataFormatada, whatsapp_enviado_por:usuarioLogado})});
-
+      const dataFormatada = agora.toLocaleString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      });
+      
+      const respUpdate = await fetchWithAuth(`/api/protocolo/${p.id}`, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          whatsapp_enviado_em: dataFormatada,
+          whatsapp_enviado_por: usuarioLogado
+        })
+      });
+      
       if (respUpdate.ok) {
         enviados++;
-        if (statusDiv) { statusDiv.style.background='#c8e6c9'; statusDiv.style.color='#2e7d32'; statusDiv.textContent=`✅ Enviado (${dataFormatada})`; }
+        if (statusDiv) {
+          statusDiv.style.background = '#c8e6c9';
+          statusDiv.style.color = '#2e7d32';
+          statusDiv.textContent = `✅ Enviado (${dataFormatada})`;
+        }
       } else {
         erros++;
-        if (statusDiv) { statusDiv.style.background='#ffcdd2'; statusDiv.style.color='#c62828'; statusDiv.textContent='❌ Erro ao registrar envio'; }
+        if (statusDiv) {
+          statusDiv.style.background = '#ffcdd2';
+          statusDiv.style.color = '#c62828';
+          statusDiv.textContent = '❌ Erro ao registrar envio';
+        }
       }
+      
+      // Delay between sends (2 seconds)
+      if (i < protocolos.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+      
     } catch (error) {
+      console.error(`Erro ao enviar para protocolo ${p.numero}:`, error);
       erros++;
-      if (statusDiv) { statusDiv.style.background='#ffcdd2'; statusDiv.style.color='#c62828'; statusDiv.textContent='❌ Erro ao enviar'; }
+      if (statusDiv) {
+        statusDiv.style.background = '#ffcdd2';
+        statusDiv.style.color = '#c62828';
+        statusDiv.textContent = '❌ Erro ao enviar';
+      }
     }
   }
-
+  
+  // Final status
   progressBar.style.width = '100%';
-  progressText.innerHTML = `✅ Concluído! <strong>${enviados}</strong> enviado(s), <strong>${pulados}</strong> pulado(s), <strong>${erros}</strong> erro(s)`;
-  btnStart.textContent = '✅ Envio Concluído'; btnStart.style.background = '#4caf50'; btnStart.disabled = true;
-  mostrarMensagem(`Envio em lote concluído! ${enviados} enviado(s), ${pulados} pulado(s), ${erros} erro(s)`, enviados > 0 ? 'sucesso' : 'info');
+  progressText.innerHTML = `
+    ✅ Concluído! 
+    <strong>${enviados}</strong> enviado(s), 
+    <strong>${pulados}</strong> pulado(s), 
+    <strong>${erros}</strong> erro(s)
+  `;
+  
+  btnStart.textContent = '✅ Envio Concluído';
+  btnStart.style.background = '#4caf50';
+  
+  mostrarMensagem(
+    `Envio em lote concluído!\n${enviados} enviado(s), ${pulados} pulado(s), ${erros} erro(s)`, 
+    enviados > 0 ? 'sucesso' : 'info'
+  );
 }
+
+
 
 function menuInicial() {
   let conteudo = document.getElementById("conteudo");
@@ -1975,7 +2038,7 @@ function navegar(pagina) {
             <div style="flex:1;min-width:180px;">
               <label>Número do Protocolo *</label>
               <input type="text" id="numero-protocolo" name="numero" maxlength="5" minlength="5" required 
-                     inputmode="numeric" pattern="^[0-9]{5}$" style="width:100%;" 
+                     inputmode="numeric" pattern="^\\d{5}$" style="width:100%;" 
                      placeholder="00000">
               <div id="protocolo-feedback" class="campo-feedback hint"></div>
             </div>
@@ -2317,8 +2380,8 @@ function navegar(pagina) {
             </div>
             <div style="width:220px;">
               <label>Número do Protocolo</label>
-              <input type="text" id="buscar-numero" maxlength="5" minlength="5" autocomplete="off" 
-                     inputmode="numeric" pattern="^[0-9]{5}$" placeholder="00000" style="width:100%;">
+              <input type="text" id="buscar-numero" maxlength="10" autocomplete="off" 
+                     inputmode="numeric" pattern="^[0-9]{1,10}$" placeholder="Ex: 12345" style="width:100%;">
             </div>
             <div style="width:200px;">
               <label>CPF do Requerente</label>
@@ -2498,7 +2561,7 @@ function navegar(pagina) {
           <div style="display:flex;gap:12px;flex-wrap:wrap;">
             <div style="width:260px;">
               <label>Número do Protocolo</label>
-              <input type="text" id="editar-numero" maxlength="5" minlength="5" inputmode="numeric" pattern="^[0-9]{5}$" placeholder="00000" style="width:100%;">
+              <input type="text" id="editar-numero" maxlength="10" inputmode="numeric" pattern="^[0-9]{1,10}$" style="width:100%;">
             </div>
             <div style="width:260px;">
               <label>CPF do Requerente</label>
@@ -2645,16 +2708,6 @@ if (pagina === 'categorias') {
     return;
   }
   gerenciarCategoriasAdmin();
-  return;
-}
-
-// ====================== [BLOCO 14.8: AUDITORIA DE EXCLUSÕES - APENAS ADMIN] ======================
-if (pagina === 'auditoria') {
-  if (sessao.tipo !== 'admin') {
-    mostrarMensagem("Apenas administradores podem acessar a auditoria.", "erro");
-    return;
-  }
-  exibirAuditoriaExclusoes();
   return;
 }
 }
@@ -3262,7 +3315,7 @@ function montarFormularioEditar(p) {
         <div style="flex:1;min-width:180px;">
           <label>Número do Protocolo *</label>
           <input type="text" id="editar-numero-protocolo" name="numero" value="${esc(p.numero)}" 
-                 maxlength="5" minlength="5" pattern="^[0-9]{5}$" required 
+                 maxlength="5" minlength="5" pattern="^\\d{5}$" required 
                  ${isAdmin ? '' : 'readonly'} style="width:100%;">
           <div id="editar-numero-protocolo-feedback" class="campo-feedback"></div>
         </div>
@@ -3408,7 +3461,6 @@ function montarFormularioEditar(p) {
         <button type="button" id="voltar-menu-editar-form">← Voltar ao Menu</button>
         <button type="button" onclick="this.form.reset();">🔄 Limpar</button>
         <button type="button" id="btn-ver-historico">📋 Ver histórico</button>
-        ${isAdmin ? `<button type="button" id="btn-excluir-definitivamente" style="background:#dc3545;color:white;">🗑️ Excluir Definitivamente</button>` : ''}
       </div>
     </form>
     <div id="historico-lista" style="margin-top:20px;"></div>
@@ -3642,61 +3694,6 @@ function montarFormularioEditar(p) {
   
   document.getElementById("btn-ver-historico").onclick = () => verHistorico(p.id);
   document.getElementById("voltar-menu-editar-form").onclick = menuInicial;
-  
-  // Handler for permanent delete (admin only)
-  if (isAdmin) {
-    const btnExcluirDef = document.getElementById("btn-excluir-definitivamente");
-    if (btnExcluirDef) {
-      btnExcluirDef.onclick = async function() {
-        // First confirmation
-        if (!confirm(`⚠️ ATENÇÃO: Esta ação é IRREVERSÍVEL!\n\nVocê está prestes a EXCLUIR DEFINITIVAMENTE o protocolo:\n\nNúmero: ${p.numero}\nRequerente: ${p.nome_requerente}\nCPF: ${formatCpf(p.cpf)}\n\nEste protocolo será REMOVIDO permanentemente do banco de dados.\nUm registro de auditoria será criado.\n\nDeseja realmente continuar?`)) {
-          return;
-        }
-        
-        // Second confirmation with password
-        const senha = prompt("🔐 Digite sua senha de administrador para confirmar a exclusão definitiva:");
-        if (!senha) {
-          mostrarMensagem("Exclusão cancelada.", "info");
-          return;
-        }
-        
-        // Optional reason for deletion
-        const motivo = prompt("📝 (Opcional) Motivo da exclusão definitiva:", "Exclusão definitiva solicitada por administrador");
-        
-        mostrarLoader("Excluindo protocolo definitivamente...");
-        
-        try {
-          const resp = await fetchWithAuth(`/api/protocolo/${p.id}/excluir-definitivamente`, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-              usuario: sessao.usuario,
-              senha: senha,
-              motivo: motivo || "Exclusão definitiva solicitada por administrador"
-            })
-          });
-          
-          esconderLoader();
-          
-          if (resp.ok) {
-            const result = await resp.json();
-            mostrarMensagem('✅ Protocolo excluído definitivamente com sucesso! Registro de auditoria criado.', 'sucesso', 5000);
-            // Navigate back to menu after successful deletion
-            setTimeout(() => {
-              navegar('menu');
-            }, 2000);
-          } else {
-            const erro = await resp.json().catch(() => ({}));
-            mostrarMensagem(erro.detail || 'Erro ao excluir protocolo definitivamente!', 'erro', 5000);
-          }
-        } catch (error) {
-          esconderLoader();
-          console.error('Erro ao excluir definitivamente:', error);
-          mostrarMensagem('Falha ao conectar ao servidor.', 'erro');
-        }
-      };
-    }
-  }
 }
 
 // ====================== [BLOCO 21: HISTÓRICO DETALHADO] ====================== //
@@ -4963,292 +4960,6 @@ async function excluirCategoria(id) {
   } catch (err) {
     esconderLoader();
     mostrarMensagem("Falha ao conectar ao servidor.", "erro");
-  }
-}
-
-// ====================== [BLOCO 24.5: AUDITORIA DE EXCLUSÕES] ====================== //
-async function exibirAuditoriaExclusoes() {
-  const sessao = getSessao();
-  if (!sessao || sessao.tipo !== "admin") {
-    mostrarMensagem("Apenas administradores podem acessar auditoria.", "erro");
-    return;
-  }
-  
-  const conteudo = document.getElementById("conteudo");
-  const hoje = new Date().toISOString().slice(0, 10);
-  
-  conteudo.innerHTML = `
-    <div class="form-destacado">
-      <h2>📋 Auditoria de Exclusões - Protocolos Excluídos Definitivamente</h2>
-      
-      <div style="background:#fff3cd;padding:15px;border-radius:8px;border:1px solid #ffeaa7;margin-bottom:20px;">
-        <strong>ℹ️ Sobre esta seção:</strong>
-        <p style="margin:8px 0 0 0;color:#666;">
-          Esta tela exibe o registro completo de todos os protocolos que foram excluídos definitivamente do sistema.
-          Os registros são mantidos permanentemente para fins de auditoria e conformidade.
-        </p>
-      </div>
-      
-      <form id="form-filtros-auditoria" autocomplete="off" style="max-width:1200px;">
-        <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
-          <div style="width:180px;">
-            <label>Data Início</label>
-            <input type="date" id="filtro-data-inicio" style="width:100%;">
-          </div>
-          <div style="width:180px;">
-            <label>Data Fim</label>
-            <input type="date" id="filtro-data-fim" value="${hoje}" style="width:100%;">
-          </div>
-          <div style="width:220px;">
-            <label>Admin Responsável</label>
-            <select id="filtro-admin" style="width:100%;">
-              <option value="">Todos os admins</option>
-            </select>
-          </div>
-          <div style="width:180px;">
-            <label>Número Protocolo</label>
-            <input type="text" id="filtro-numero" maxlength="5" inputmode="numeric" placeholder="00000" style="width:100%;">
-          </div>
-        </div>
-        
-        <div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;">
-          <button type="submit" id="btn-filtrar-auditoria">🔍 Filtrar</button>
-          <button type="button" id="btn-limpar-filtros-auditoria">🗑️ Limpar Filtros</button>
-          <button type="button" id="btn-exportar-csv">📥 Exportar CSV</button>
-          <button type="button" id="voltar-menu-auditoria">← Voltar ao Menu</button>
-        </div>
-      </form>
-      
-      <div id="auditoria-stats" style="margin-bottom:20px;padding:15px;background:#f8f9fa;border-radius:8px;border:1px solid #e9ecef;">
-        <strong>📊 Total de registros:</strong> <span id="total-auditoria">Carregando...</span>
-      </div>
-      
-      <div id="lista-auditoria" style="margin-top:20px;"></div>
-      
-      <div class="paginacao" id="paginacao-auditoria" style="display:none;margin-top:20px;text-align:center;">
-        <button id="btn-prev-auditoria">← Anterior</button>
-        <span id="paginacao-info-auditoria" style="margin:0 12px;"></span>
-        <button id="btn-next-auditoria">Próxima →</button>
-      </div>
-    </div>
-  `;
-  
-  // Carregar lista de admins
-  await carregarListaAdmins();
-  
-  // Event handlers
-  document.getElementById("form-filtros-auditoria").onsubmit = function(e) {
-    e.preventDefault();
-    carregarAuditoria(1);
-  };
-  
-  document.getElementById("btn-limpar-filtros-auditoria").onclick = function() {
-    document.getElementById("filtro-data-inicio").value = "";
-    document.getElementById("filtro-data-fim").value = hoje;
-    document.getElementById("filtro-admin").value = "";
-    document.getElementById("filtro-numero").value = "";
-    carregarAuditoria(1);
-  };
-  
-  document.getElementById("btn-exportar-csv").onclick = exportarAuditoriaCSV;
-  document.getElementById("voltar-menu-auditoria").onclick = menuInicial;
-  
-  // Carregar dados iniciais
-  carregarAuditoria(1);
-}
-
-async function carregarListaAdmins() {
-  try {
-    const resp = await fetchWithAuth('/api/usuarios/admins');
-    if (resp.ok) {
-      const admins = await resp.json();
-      const selectAdmin = document.getElementById("filtro-admin");
-      if (selectAdmin) {
-        admins.forEach(a => {
-          const option = document.createElement("option");
-          option.value = a.usuario;
-          option.textContent = a.usuario;
-          selectAdmin.appendChild(option);
-        });
-      }
-    }
-  } catch (err) {
-    console.error("Erro ao carregar lista de admins:", err);
-  }
-}
-
-let currentAuditoriaPage = 1;
-
-async function carregarAuditoria(page = 1) {
-  currentAuditoriaPage = page;
-  const listaEl = document.getElementById("lista-auditoria");
-  const statsEl = document.getElementById("total-auditoria");
-  const paginacaoEl = document.getElementById("paginacao-auditoria");
-  
-  if (!listaEl) return;
-  
-  listaEl.innerHTML = '<div style="text-align:center;padding:40px;"><div class="loader"></div><p>Carregando registros de auditoria...</p></div>';
-  
-  // Coletar filtros
-  const dataInicio = document.getElementById("filtro-data-inicio")?.value || "";
-  const dataFim = document.getElementById("filtro-data-fim")?.value || "";
-  const admin = document.getElementById("filtro-admin")?.value || "";
-  const numero = document.getElementById("filtro-numero")?.value || "";
-  
-  const params = new URLSearchParams();
-  if (dataInicio) params.append("data_inicio", dataInicio);
-  if (dataFim) params.append("data_fim", dataFim);
-  if (admin) params.append("admin", admin);
-  if (numero) params.append("numero_protocolo", numero);
-  params.append("page", page);
-  params.append("per_page", "20");
-  
-  try {
-    const resp = await fetchWithAuth(`/api/auditoria/exclusoes?${params.toString()}`);
-    
-    if (!resp.ok) {
-      const erro = await resp.json().catch(() => ({}));
-      listaEl.innerHTML = `<div style="color:#dc3545;text-align:center;padding:20px;">${erro.detail || "Erro ao carregar auditoria."}</div>`;
-      statsEl.textContent = "Erro";
-      return;
-    }
-    
-    const data = await resp.json();
-    const registros = data.registros || [];
-    const total = data.total || 0;
-    const totalPages = data.total_pages || 1;
-    
-    statsEl.textContent = `${total} registro(s) encontrado(s)`;
-    
-    if (registros.length === 0) {
-      listaEl.innerHTML = `
-        <div style="text-align:center;padding:40px;color:#666;">
-          <div style="font-size:48px;margin-bottom:12px;">📭</div>
-          <p>Nenhum registro de exclusão encontrado com os filtros aplicados.</p>
-        </div>
-      `;
-      paginacaoEl.style.display = "none";
-      return;
-    }
-    
-    // Renderizar tabela
-    const rows = registros.map(r => `
-      <tr style="border-bottom:1px solid #eee;">
-        <td style="padding:12px;">${esc(r.numero)}</td>
-        <td style="padding:12px;">${esc(r.nome_requerente)}</td>
-        <td style="padding:12px;">${esc(formatCpf(r.cpf))}</td>
-        <td style="padding:12px;">${esc(r.categoria)}</td>
-        <td style="padding:12px;">${esc(r.data_criacao)}</td>
-        <td style="padding:12px;">${esc(r.exclusao_timestamp)}</td>
-        <td style="padding:12px;"><strong>${esc(r.admin_responsavel)}</strong></td>
-        <td style="padding:12px;max-width:200px;word-wrap:break-word;">${esc(r.motivo || "-")}</td>
-      </tr>
-    `).join('');
-    
-    listaEl.innerHTML = `
-      <div style="overflow-x:auto;">
-        <table style="width:100%;border-collapse:collapse;background:white;border:1px solid #e0e0e0;border-radius:8px;overflow:hidden;">
-          <thead>
-            <tr style="background:#f8f9fa;">
-              <th style="padding:12px;text-align:left;border-bottom:2px solid #dee2e6;">Número</th>
-              <th style="padding:12px;text-align:left;border-bottom:2px solid #dee2e6;">Requerente</th>
-              <th style="padding:12px;text-align:left;border-bottom:2px solid #dee2e6;">CPF</th>
-              <th style="padding:12px;text-align:left;border-bottom:2px solid #dee2e6;">Categoria</th>
-              <th style="padding:12px;text-align:left;border-bottom:2px solid #dee2e6;">Data Criação</th>
-              <th style="padding:12px;text-align:left;border-bottom:2px solid #dee2e6;">Data Exclusão</th>
-              <th style="padding:12px;text-align:left;border-bottom:2px solid #dee2e6;">Admin</th>
-              <th style="padding:12px;text-align:left;border-bottom:2px solid #dee2e6;">Motivo</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${rows}
-          </tbody>
-        </table>
-      </div>
-    `;
-    
-    // Paginação
-    if (totalPages > 1) {
-      paginacaoEl.style.display = "block";
-      document.getElementById("paginacao-info-auditoria").textContent = `Página ${page} de ${totalPages}`;
-      
-      const btnPrev = document.getElementById("btn-prev-auditoria");
-      const btnNext = document.getElementById("btn-next-auditoria");
-      
-      btnPrev.disabled = page <= 1;
-      btnNext.disabled = page >= totalPages;
-      
-      btnPrev.onclick = () => {
-        if (page > 1) carregarAuditoria(page - 1);
-      };
-      
-      btnNext.onclick = () => {
-        if (page < totalPages) carregarAuditoria(page + 1);
-      };
-    } else {
-      paginacaoEl.style.display = "none";
-    }
-    
-  } catch (err) {
-    console.error("Erro ao carregar auditoria:", err);
-    listaEl.innerHTML = `<div style="color:#dc3545;text-align:center;padding:20px;">Falha ao conectar ao servidor.</div>`;
-    statsEl.textContent = "Erro";
-  }
-}
-
-async function exportarAuditoriaCSV() {
-  const dataInicio = document.getElementById("filtro-data-inicio")?.value || "";
-  const dataFim = document.getElementById("filtro-data-fim")?.value || "";
-  const admin = document.getElementById("filtro-admin")?.value || "";
-  const numero = document.getElementById("filtro-numero")?.value || "";
-  
-  const params = new URLSearchParams();
-  if (dataInicio) params.append("data_inicio", dataInicio);
-  if (dataFim) params.append("data_fim", dataFim);
-  if (admin) params.append("admin", admin);
-  if (numero) params.append("numero_protocolo", numero);
-  
-  mostrarLoader("Gerando arquivo CSV...");
-  
-  try {
-    const resp = await fetchWithAuth(`/api/auditoria/exclusoes/export?${params.toString()}`);
-    
-    esconderLoader();
-    
-    if (!resp.ok) {
-      const erro = await resp.json().catch(() => ({}));
-      mostrarMensagem(erro.detail || "Erro ao exportar CSV.", "erro");
-      return;
-    }
-    
-    // Download file
-    const blob = await resp.blob();
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    
-    // Get filename from Content-Disposition header or use default
-    const disposition = resp.headers.get("Content-Disposition");
-    let filename = "auditoria_exclusoes.csv";
-    if (disposition && disposition.includes("filename=")) {
-      const matches = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(disposition);
-      if (matches && matches[1]) {
-        filename = matches[1].replace(/['"]/g, '');
-      }
-    }
-    
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
-    
-    mostrarMensagem("Arquivo CSV exportado com sucesso!", "sucesso");
-    
-  } catch (err) {
-    esconderLoader();
-    console.error("Erro ao exportar CSV:", err);
-    mostrarMensagem("Falha ao exportar CSV.", "erro");
   }
 }
 
