@@ -8,6 +8,7 @@ import hashlib
 import hmac
 import logging
 import asyncio
+import csv
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any, Tuple
 from contextlib import asynccontextmanager
@@ -111,6 +112,7 @@ class ProtocoloModel(BaseModel):
     data_retirada: str = ""
     whatsapp_enviado_em: str = Field(default="", max_length=30, description="Data/hora do último envio WhatsApp")
     whatsapp_enviado_por: str = Field(default="", max_length=60, description="Usuário que enviou última mensagem WhatsApp")
+    data_concluido: str = Field(default="", max_length=30, description="Data/hora quando o protocolo foi marcado como concluído")
     exig1_retirada_por: str = Field(default="", max_length=60)
     exig1_data_retirada: str = Field(default="", max_length=10)
     exig1_reapresentada_por: str = Field(default="", max_length=60)
@@ -196,6 +198,7 @@ usuarios_coll: Collection = db["usuarios"]
 filtros_coll: Collection = db["filtros"]
 notificacoes_coll: Collection = db["notificacoes"]
 categorias_coll: Collection = db["categorias"]
+protocolos_excluidos_coll: Collection = db["protocolos_excluidos"]
 
 def create_indexes():
     try:
@@ -219,6 +222,7 @@ def create_indexes():
         protocolos_coll.create_index([("exig2_data_reapresentacao_dt", 1)])
         protocolos_coll.create_index([("exig3_data_retirada_dt", 1)])
         protocolos_coll.create_index([("exig3_data_reapresentacao_dt", 1)])
+        protocolos_coll.create_index([("data_concluido_dt", 1)])
         protocolos_coll.create_index([("categoria", 1), ("status", 1), ("data_criacao_dt", -1)])
         protocolos_coll.create_index([("status", 1), ("data_criacao_dt", -1)])
         protocolos_coll.create_index([("categoria", 1), ("data_criacao_dt", -1)])
@@ -278,6 +282,10 @@ def inicializa_admin():
 
 def now_str():
     return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+
+def is_status_concluido(status: str) -> bool:
+    """Check if status is 'concluído' (case-insensitive)"""
+    return (status or "").strip().lower() in {"concluído", "concluido"}
 
 # ====================== [BLOCO 7: INICIALIZAÇÃO] ======================
 create_indexes()
@@ -527,6 +535,22 @@ def listar_usuarios_nomes():
         logger.error(f"Erro ao listar nomes de usuários: {e}")
         raise HTTPException(status_code=500, detail="Erro ao listar usuários")
 
+@app.get("/api/usuarios/admins")
+def listar_admins():
+    """
+    Endpoint to list only admin users.
+    Used for filtering audit trail by admin responsible.
+    """
+    try:
+        admins = list(usuarios_coll.find(
+            {"tipo": "admin", "bloqueado": {"$ne": True}},
+            {"usuario": 1, "_id": 0}
+        ).sort("usuario", ASCENDING))
+        return admins
+    except Exception as e:
+        logger.error(f"Erro ao listar admins: {e}")
+        raise HTTPException(status_code=500, detail="Erro ao listar admins")
+
 @app.post("/api/usuario")
 def cadastrar_usuario(usuario: UsuarioModel):
     if usuarios_coll.find_one({"usuario": usuario.usuario}):
@@ -728,6 +752,15 @@ def incluir_protocolo(protocolo: ProtocoloModel):
             novo[k] = novo.get(k, "") or ""
         novo.pop(f"exig{i}_data_retirada_dt", None)
         novo.pop(f"exig{i}_data_reapresentacao_dt", None)
+    
+    # Set data_concluido if protocol is created with status "Concluído"
+    if is_status_concluido(status):
+        novo["data_concluido"] = novo["ultima_alteracao_data"]
+        novo["data_concluido_dt"] = datetime.now(timezone.utc)
+    else:
+        novo["data_concluido"] = ""
+        novo.pop("data_concluido_dt", None)
+    
     novo["historico_alteracoes"] = [{
         "acao": "criar",
         "usuario": novo["ultima_alteracao_nome"],
@@ -1104,6 +1137,20 @@ def editar_protocolo(id: str, protocolo: dict):
                 unset_fields[f"exig{idx}_data_reapresentacao_dt"] = ""
     for i in (1, 2, 3):
         process_exigencia(i)
+    
+    # Check if status changed to "Concluído"
+    old_status_concluido = is_status_concluido(prot.get("status", ""))
+    new_status_raw = atualizacao.get("status", prot.get("status", ""))
+    new_status_concluido = is_status_concluido(new_status_raw)
+    
+    if new_status_concluido and not old_status_concluido:
+        atualizacao["data_concluido"] = now_str()
+        atualizacao["data_concluido_dt"] = datetime.now(timezone.utc)
+    elif not new_status_concluido and "status" in atualizacao and old_status_concluido:
+        # If status is changed away from "Concluído", clear the data_concluido
+        atualizacao["data_concluido"] = ""
+        unset_fields["data_concluido_dt"] = ""
+    
     atualizacao["ultima_alteracao_data"] = now_str()
     atualizacao["ultima_alteracao_nome"] = protocolo.get("ultima_alteracao_nome", "") or ""
     atualizacao.pop("id", None)
@@ -1192,6 +1239,277 @@ def excluir_protocolo(id: str, usuario: str = Query(...)):
         logger.info(f"Protocolo {prot.get('numero', '')} excluído por {usuario}")
         return {"ok": True}
     raise HTTPException(status_code=404, detail="Protocolo não encontrado.")
+
+@app.post("/api/protocolo/{id}/excluir-definitivamente")
+def excluir_protocolo_definitivamente(id: str, body: dict = Body(...)):
+    """
+    Permanently delete a protocol from the database.
+    Only administrators can perform this action with password confirmation.
+    Creates an audit trail in protocolos_excluidos collection.
+    """
+    try:
+        oid = ObjectId(id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="ID inválido.")
+    
+    # Get and validate parameters
+    usuario = body.get("usuario", "").strip()
+    senha = body.get("senha", "").strip()
+    
+    if not usuario or not senha:
+        raise HTTPException(status_code=400, detail="Usuário e senha são obrigatórios.")
+    
+    # Verify user is admin
+    user = usuarios_coll.find_one({"usuario": usuario})
+    if not user:
+        raise HTTPException(status_code=403, detail="Usuário não encontrado.")
+    
+    if user.get("tipo") != "admin":
+        raise HTTPException(status_code=403, detail="Apenas administradores podem excluir definitivamente protocolos.")
+    
+    # Verify password
+    senha_hash = user.get("senha", "")
+    if not verify_password(senha, senha_hash):
+        raise HTTPException(status_code=403, detail="Senha incorreta.")
+    
+    # Get protocol to delete
+    prot = protocolos_coll.find_one({"_id": oid})
+    if not prot:
+        raise HTTPException(status_code=404, detail="Protocolo não encontrado.")
+    
+    # Create audit trail in protocolos_excluidos collection
+    audit_data = {
+        "protocolo_original": prot,  # Complete protocol backup
+        "protocolo_id_original": str(prot["_id"]),
+        "numero": prot.get("numero", ""),
+        "nome_requerente": prot.get("nome_requerente", ""),
+        "cpf": prot.get("cpf", ""),
+        "exclusao_timestamp": now_str(),
+        "exclusao_timestamp_dt": datetime.now(timezone.utc),
+        "admin_responsavel": usuario,
+        "motivo": body.get("motivo", "Exclusão definitiva solicitada por administrador")
+    }
+    
+    try:
+        # Insert audit trail first
+        audit_result = protocolos_excluidos_coll.insert_one(audit_data)
+        audit_id = str(audit_result.inserted_id)
+        logger.info(f"Audit trail criado para protocolo {prot.get('numero', '')} excluído definitivamente")
+        
+        # Delete from main collection
+        result = protocolos_coll.delete_one({"_id": oid})
+        
+        if result.deleted_count == 1:
+            logger.info(f"Protocolo {prot.get('numero', '')} excluído definitivamente por {usuario}")
+            return {
+                "ok": True,
+                "message": "Protocolo excluído definitivamente com sucesso. Registro de auditoria criado.",
+                "audit_id": audit_id
+            }
+        else:
+            # Rollback: Remove audit trail if deletion failed
+            protocolos_excluidos_coll.delete_one({"_id": audit_result.inserted_id})
+            logger.warning(f"Exclusão falhou, audit trail removido para protocolo {prot.get('numero', '')}")
+            raise HTTPException(status_code=404, detail="Protocolo não encontrado para exclusão.")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erro ao excluir definitivamente protocolo: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erro ao excluir protocolo: {str(e)}")
+
+@app.get("/api/auditoria/exclusoes")
+def consultar_auditoria_exclusoes(
+    data_inicio: Optional[str] = Query(default=None, description="Data inicial (YYYY-MM-DD)"),
+    data_fim: Optional[str] = Query(default=None, description="Data final (YYYY-MM-DD)"),
+    admin: Optional[str] = Query(default=None, description="Admin responsável"),
+    numero_protocolo: Optional[str] = Query(default=None, description="Número do protocolo"),
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=50, ge=1, le=100)
+):
+    """
+    Query deleted protocols audit trail with filters.
+    Only accessible by admin users.
+    """
+    try:
+        filtro = {}
+        
+        # Filter by date range
+        if data_inicio or data_fim:
+            date_filter = {}
+            if data_inicio:
+                try:
+                    dt_inicio = datetime.strptime(data_inicio, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+                    date_filter["$gte"] = dt_inicio
+                except ValueError:
+                    raise HTTPException(status_code=400, detail="Data inicial inválida. Use YYYY-MM-DD.")
+            if data_fim:
+                try:
+                    # Include the entire end day
+                    dt_fim = datetime.strptime(data_fim, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=timezone.utc)
+                    date_filter["$lte"] = dt_fim
+                except ValueError:
+                    raise HTTPException(status_code=400, detail="Data final inválida. Use YYYY-MM-DD.")
+            if date_filter:
+                filtro["exclusao_timestamp_dt"] = date_filter
+        
+        # Filter by admin
+        if admin:
+            filtro["admin_responsavel"] = admin
+        
+        # Filter by protocol number
+        if numero_protocolo:
+            filtro["numero"] = apenas_digitos(numero_protocolo)
+        
+        # Count total
+        total = protocolos_excluidos_coll.count_documents(filtro)
+        
+        # Paginate
+        skip = (page - 1) * per_page
+        registros = list(
+            protocolos_excluidos_coll.find(filtro)
+            .sort("exclusao_timestamp_dt", DESCENDING)
+            .skip(skip)
+            .limit(per_page)
+        )
+        
+        # Format output
+        saida = []
+        for r in registros:
+            r_out = {
+                "id": str(r["_id"]),
+                "protocolo_id_original": r.get("protocolo_id_original", ""),
+                "numero": r.get("numero", ""),
+                "nome_requerente": r.get("nome_requerente", ""),
+                "cpf": r.get("cpf", ""),
+                "categoria": r.get("protocolo_original", {}).get("categoria", ""),
+                "status_original": r.get("protocolo_original", {}).get("status", ""),
+                "exclusao_timestamp": r.get("exclusao_timestamp", ""),
+                "admin_responsavel": r.get("admin_responsavel", ""),
+                "motivo": r.get("motivo", ""),
+                # Include some key protocol fields for reference
+                "data_criacao": r.get("protocolo_original", {}).get("data_criacao", ""),
+                "responsavel": r.get("protocolo_original", {}).get("responsavel", ""),
+            }
+            saida.append(r_out)
+        
+        return {
+            "registros": saida,
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+            "total_pages": (total + per_page - 1) // per_page
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erro ao consultar auditoria de exclusões: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erro ao consultar auditoria: {str(e)}")
+
+@app.get("/api/auditoria/exclusoes/export")
+def exportar_auditoria_exclusoes_csv(
+    data_inicio: Optional[str] = Query(default=None),
+    data_fim: Optional[str] = Query(default=None),
+    admin: Optional[str] = Query(default=None),
+    numero_protocolo: Optional[str] = Query(default=None)
+):
+    """
+    Export deleted protocols audit trail to CSV.
+    Only accessible by admin users.
+    """
+    try:
+        filtro = {}
+        
+        # Filter by date range
+        if data_inicio or data_fim:
+            date_filter = {}
+            if data_inicio:
+                try:
+                    dt_inicio = datetime.strptime(data_inicio, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+                    date_filter["$gte"] = dt_inicio
+                except ValueError:
+                    raise HTTPException(status_code=400, detail="Data inicial inválida. Use YYYY-MM-DD.")
+            if data_fim:
+                try:
+                    dt_fim = datetime.strptime(data_fim, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=timezone.utc)
+                    date_filter["$lte"] = dt_fim
+                except ValueError:
+                    raise HTTPException(status_code=400, detail="Data final inválida. Use YYYY-MM-DD.")
+            if date_filter:
+                filtro["exclusao_timestamp_dt"] = date_filter
+        
+        # Filter by admin
+        if admin:
+            filtro["admin_responsavel"] = admin
+        
+        # Filter by protocol number
+        if numero_protocolo:
+            filtro["numero"] = apenas_digitos(numero_protocolo)
+        
+        # Define CSV fieldnames upfront for consistent structure
+        fieldnames = [
+            "Número", "Nome Requerente", "CPF", "Categoria", "Status Original",
+            "Data Criação", "Responsável Protocolo", "Título", "Data Exclusão",
+            "Admin Responsável", "Motivo", "Observações"
+        ]
+        
+        # Generator function for streaming CSV
+        def generate_csv():
+            output = io.StringIO()
+            writer = csv.DictWriter(output, fieldnames=fieldnames)
+            
+            # Write header
+            writer.writeheader()
+            yield output.getvalue()
+            output.truncate(0)
+            output.seek(0)
+            
+            # Stream records
+            cursor = protocolos_excluidos_coll.find(filtro).sort("exclusao_timestamp_dt", DESCENDING)
+            
+            for r in cursor:
+                prot_orig = r.get("protocolo_original", {})
+                row = {
+                    "Número": r.get("numero", ""),
+                    "Nome Requerente": r.get("nome_requerente", ""),
+                    "CPF": r.get("cpf", ""),
+                    "Categoria": prot_orig.get("categoria", ""),
+                    "Status Original": prot_orig.get("status", ""),
+                    "Data Criação": prot_orig.get("data_criacao", ""),
+                    "Responsável Protocolo": prot_orig.get("responsavel", ""),
+                    "Título": prot_orig.get("titulo", ""),
+                    "Data Exclusão": r.get("exclusao_timestamp", ""),
+                    "Admin Responsável": r.get("admin_responsavel", ""),
+                    "Motivo": r.get("motivo", ""),
+                    "Observações": prot_orig.get("observacoes", ""),
+                }
+                
+                writer.writerow(row)
+                yield output.getvalue()
+                output.truncate(0)
+                output.seek(0)
+            
+            output.close()
+        
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        filename = f"auditoria_exclusoes_{timestamp}.csv"
+        
+        # Create response with generator for memory efficiency
+        response = StreamingResponse(
+            (chunk.encode('utf-8-sig') if i == 0 else chunk.encode('utf-8') for i, chunk in enumerate(generate_csv())),
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+        
+        return response
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erro ao exportar auditoria: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erro ao exportar: {str(e)}")
+
 
 # ====================== [BLOCO 15: ATENÇÃO / AUTOPREENCHIMENTO] ======================
 @app.get("/api/protocolo/atencao")
@@ -1576,56 +1894,22 @@ def _serialize_doc(doc: Dict[str, Any]) -> Dict[str, Any]:
 @app.get("/api/protocolo/finalizados/{data}")
 def protocolos_finalizados_por_data(data: str):
     try:
-        data_obj = datetime.strptime(data, "%Y-%m-%d")
+        data_obj = datetime.strptime(data, "%Y-%m-%d").replace(tzinfo=timezone.utc)
         dia_iso = data_obj.strftime("%Y-%m-%d")
-        dia_br = data_obj.strftime("%d/%m/%Y")
 
-        def _ts_matches_day(ts: Any) -> bool:
-            s = str(ts or "").strip()
-            return bool(s) and (s.startswith(dia_iso) or s.startswith(dia_br))
-
-        def _status_concluido(val: Any) -> bool:
-            return str(val or "").strip().lower() in {"concluído", "concluido"}
-
+        # Query protocols with status "Concluído" where data_concluido matches the selected date
         candidatos = list(protocolos_coll.find({
             "status": {"$regex": "^conclu[íi]do$", "$options": "i"}
         }))
 
         saida = []
         for p in candidatos:
-            incluir = False
-
-            for ev in (p.get("historico_alteracoes") or []):
-                if not isinstance(ev, dict): 
-                    continue
-                ts = ev.get("timestamp") or ev.get("data") or ev.get("created_at")
-                for ch in (ev.get("changes") or []):
-                    if not isinstance(ch, dict):
-                        continue
-                    campo = str(ch.get("campo") or ch.get("field") or "").strip().lower()
-                    para = ch.get("para") if "para" in ch else ch.get("to")
-                    if campo == "status" and _status_concluido(para) and _ts_matches_day(ts):
-                        incluir = True
-                        break
-                if incluir:
-                    break
-
-            if not incluir:
-                for h in (p.get("historico") or []):
-                    if not isinstance(h, dict):
-                        continue
-                    data_h = h.get("data") or h.get("timestamp")
-                    acao = str(h.get("acao") or h.get("action") or "").lower()
-                    if _ts_matches_day(data_h) and ("status" in acao or "conclu" in acao):
-                        incluir = True
-                        break
-
-            if not incluir and _ts_matches_day(p.get("ultima_alteracao_data")):
-                incluir = True
-
-            if incluir:
+            data_concluido = p.get("data_concluido", "")
+            # Check if data_concluido starts with the selected date (ISO format)
+            if data_concluido and data_concluido.startswith(dia_iso):
                 p_out = {k: v for k, v in p.items() if k not in [
                     "_id", "data_criacao_dt", "data_retirada_dt", "historico_alteracoes",
+                    "data_concluido_dt",
                     "exig1_data_retirada_dt","exig1_data_reapresentacao_dt",
                     "exig2_data_retirada_dt","exig2_data_reapresentacao_dt",
                     "exig3_data_retirada_dt","exig3_data_reapresentacao_dt"
