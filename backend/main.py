@@ -17,6 +17,8 @@ import json
 from functools import lru_cache
 import io
 import zipfile
+import sqlite3
+import tempfile
 from io import BytesIO
 from datetime import datetime as _dt
 
@@ -1796,6 +1798,308 @@ async def restaurar_backup_protegido2(usuario: str = Body(...), senha: str = Bod
     except Exception as e:
         logger.exception("Erro ao restaurar backup protegido: %s", e)
         raise HTTPException(status_code=500, detail=f"Erro ao restaurar: {str(e)}")
+
+@app.post("/api/backup/sqlite")
+def backup_sqlite():
+    """Gera backup no formato SQLite (.db) compatível com versão SQLite da aplicação."""
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
+            tmp_path = tmp.name
+
+        def _to_json_safe(v):
+            """Serialize a value to a JSON-safe string, preserving type information."""
+            if isinstance(v, (dict, list)):
+                return json.dumps(v, ensure_ascii=False, default=str)
+            return json.dumps(v, ensure_ascii=False, default=str)
+
+        conn = sqlite3.connect(tmp_path)
+        try:
+            cur = conn.cursor()
+
+            # --- Tabela protocolos ---
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS protocolos (
+                    id TEXT PRIMARY KEY,
+                    numero TEXT,
+                    nome_requerente TEXT,
+                    sem_cpf INTEGER DEFAULT 0,
+                    cpf TEXT,
+                    whatsapp TEXT,
+                    titulo TEXT,
+                    nome_parte_ato TEXT,
+                    outras_infos TEXT,
+                    data_criacao TEXT,
+                    status TEXT,
+                    categoria TEXT,
+                    responsavel TEXT,
+                    observacoes TEXT,
+                    editavel INTEGER DEFAULT 1,
+                    ultima_alteracao_nome TEXT,
+                    ultima_alteracao_data TEXT,
+                    retirado_por TEXT,
+                    data_retirada TEXT,
+                    whatsapp_enviado_em TEXT,
+                    whatsapp_enviado_por TEXT,
+                    data_concluido TEXT,
+                    exig1_retirada_por TEXT,
+                    exig1_data_retirada TEXT,
+                    exig1_reapresentada_por TEXT,
+                    exig1_data_reapresentacao TEXT,
+                    exig2_retirada_por TEXT,
+                    exig2_data_retirada TEXT,
+                    exig2_reapresentada_por TEXT,
+                    exig2_data_reapresentacao TEXT,
+                    exig3_retirada_por TEXT,
+                    exig3_data_retirada TEXT,
+                    exig3_reapresentada_por TEXT,
+                    exig3_data_reapresentacao TEXT,
+                    extra_data TEXT
+                )
+            """)
+
+            known_proto_cols = {
+                "numero", "nome_requerente", "sem_cpf", "cpf", "whatsapp", "titulo",
+                "nome_parte_ato", "outras_infos", "data_criacao", "status", "categoria",
+                "responsavel", "observacoes", "editavel", "ultima_alteracao_nome",
+                "ultima_alteracao_data", "retirado_por", "data_retirada",
+                "whatsapp_enviado_em", "whatsapp_enviado_por", "data_concluido",
+                "exig1_retirada_por", "exig1_data_retirada", "exig1_reapresentada_por",
+                "exig1_data_reapresentacao", "exig2_retirada_por", "exig2_data_retirada",
+                "exig2_reapresentada_por", "exig2_data_reapresentacao",
+                "exig3_retirada_por", "exig3_data_retirada", "exig3_reapresentada_por",
+                "exig3_data_reapresentacao",
+            }
+
+            for doc in protocolos_coll.find():
+                row_id = str(doc.get("_id", ""))
+                extra = {k: _to_json_safe(v) for k, v in doc.items() if k != "_id" and k not in known_proto_cols}
+                cur.execute("""
+                    INSERT OR REPLACE INTO protocolos (
+                        id, numero, nome_requerente, sem_cpf, cpf, whatsapp, titulo,
+                        nome_parte_ato, outras_infos, data_criacao, status, categoria,
+                        responsavel, observacoes, editavel, ultima_alteracao_nome,
+                        ultima_alteracao_data, retirado_por, data_retirada,
+                        whatsapp_enviado_em, whatsapp_enviado_por, data_concluido,
+                        exig1_retirada_por, exig1_data_retirada, exig1_reapresentada_por,
+                        exig1_data_reapresentacao, exig2_retirada_por, exig2_data_retirada,
+                        exig2_reapresentada_por, exig2_data_reapresentacao,
+                        exig3_retirada_por, exig3_data_retirada, exig3_reapresentada_por,
+                        exig3_data_reapresentacao, extra_data
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                """, (
+                    row_id,
+                    doc.get("numero", ""),
+                    doc.get("nome_requerente", ""),
+                    1 if doc.get("sem_cpf") else 0,
+                    doc.get("cpf", ""),
+                    doc.get("whatsapp", ""),
+                    doc.get("titulo", ""),
+                    doc.get("nome_parte_ato", ""),
+                    doc.get("outras_infos", ""),
+                    doc.get("data_criacao", ""),
+                    doc.get("status", ""),
+                    doc.get("categoria", ""),
+                    doc.get("responsavel", ""),
+                    doc.get("observacoes", ""),
+                    1 if doc.get("editavel", True) else 0,
+                    doc.get("ultima_alteracao_nome", ""),
+                    doc.get("ultima_alteracao_data", ""),
+                    doc.get("retirado_por", ""),
+                    doc.get("data_retirada", ""),
+                    doc.get("whatsapp_enviado_em", ""),
+                    doc.get("whatsapp_enviado_por", ""),
+                    doc.get("data_concluido", ""),
+                    doc.get("exig1_retirada_por", ""),
+                    doc.get("exig1_data_retirada", ""),
+                    doc.get("exig1_reapresentada_por", ""),
+                    doc.get("exig1_data_reapresentacao", ""),
+                    doc.get("exig2_retirada_por", ""),
+                    doc.get("exig2_data_retirada", ""),
+                    doc.get("exig2_reapresentada_por", ""),
+                    doc.get("exig2_data_reapresentacao", ""),
+                    doc.get("exig3_retirada_por", ""),
+                    doc.get("exig3_data_retirada", ""),
+                    doc.get("exig3_reapresentada_por", ""),
+                    doc.get("exig3_data_reapresentacao", ""),
+                    json.dumps(extra, ensure_ascii=False) if extra else None,
+                ))
+
+            # --- Tabela usuarios ---
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS usuarios (
+                    id TEXT PRIMARY KEY,
+                    usuario TEXT UNIQUE,
+                    senha TEXT,
+                    tipo TEXT,
+                    extra_data TEXT
+                )
+            """)
+
+            known_user_cols = {"usuario", "senha", "tipo"}
+            for doc in usuarios_coll.find():
+                row_id = str(doc.get("_id", ""))
+                extra = {k: _to_json_safe(v) for k, v in doc.items() if k != "_id" and k not in known_user_cols}
+                cur.execute("""
+                    INSERT OR REPLACE INTO usuarios (id, usuario, senha, tipo, extra_data)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (
+                    row_id,
+                    doc.get("usuario", ""),
+                    doc.get("senha", ""),
+                    doc.get("tipo", ""),
+                    json.dumps(extra, ensure_ascii=False) if extra else None,
+                ))
+
+            # --- Tabela categorias ---
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS categorias (
+                    id TEXT PRIMARY KEY,
+                    nome TEXT UNIQUE,
+                    descricao TEXT
+                )
+            """)
+
+            for doc in categorias_coll.find():
+                cur.execute("""
+                    INSERT OR REPLACE INTO categorias (id, nome, descricao)
+                    VALUES (?, ?, ?)
+                """, (
+                    str(doc.get("_id", "")),
+                    doc.get("nome", ""),
+                    doc.get("descricao", ""),
+                ))
+
+            conn.commit()
+        finally:
+            conn.close()
+
+        with open(tmp_path, "rb") as f:
+            db_bytes = f.read()
+
+        fname = f"backup_sqlite_{_dt.now().strftime('%Y%m%d_%H%M%S')}.db"
+        return StreamingResponse(
+            BytesIO(db_bytes),
+            media_type="application/octet-stream",
+            headers={"Content-Disposition": f'attachment; filename="{fname}"'}
+        )
+    except Exception as e:
+        logger.exception("Erro ao gerar backup SQLite: %s", e)
+        raise HTTPException(status_code=500, detail=f"Erro ao gerar backup SQLite: {e}")
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.unlink(tmp_path)
+            except Exception:
+                pass
+
+@app.post("/api/backup/upload/sqlite")
+async def restaurar_backup_sqlite(usuario: str = Body(...), senha: str = Body(...), file: UploadFile = File(...)):
+    """Restaura dados a partir de um arquivo de backup SQLite (.db) gerado por esta aplicação."""
+    user = usuarios_coll.find_one({"usuario": usuario})
+    if not user or not verify_password(senha, user.get("senha", "")) or user.get("tipo") != "admin":
+        raise HTTPException(status_code=403, detail="Apenas administradores podem restaurar backup.")
+    tmp_path = None
+    try:
+        content = await file.read()
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
+
+        conn = sqlite3.connect(tmp_path)
+        try:
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+
+            # Verifica se o arquivo é um SQLite válido com as tabelas esperadas
+            tables = {row[0] for row in cur.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+            if "protocolos" not in tables and "usuarios" not in tables:
+                raise ValueError("Arquivo SQLite inválido: tabelas 'protocolos' e 'usuarios' não encontradas.")
+
+            # --- Restaurar usuarios ---
+            if "usuarios" in tables:
+                rows = cur.execute("SELECT * FROM usuarios").fetchall()
+                docs_usuarios = []
+                for row in rows:
+                    doc = {k: row[k] for k in row.keys() if k not in ("id", "extra_data") and row[k] is not None}
+                    extra_raw = row["extra_data"] if "extra_data" in row.keys() else None
+                    if extra_raw:
+                        try:
+                            extra = json.loads(extra_raw)
+                            for k, v in extra.items():
+                                try:
+                                    doc[k] = json.loads(v) if isinstance(v, str) else v
+                                except (json.JSONDecodeError, ValueError):
+                                    doc[k] = v
+                        except Exception:
+                            pass
+                    if doc.get("usuario"):
+                        docs_usuarios.append(doc)
+                if docs_usuarios:
+                    usuarios_coll.delete_many({})
+                    usuarios_coll.insert_many(docs_usuarios)
+
+            # --- Restaurar protocolos ---
+            if "protocolos" in tables:
+                rows = cur.execute("SELECT * FROM protocolos").fetchall()
+                docs_protocolos = []
+                for row in rows:
+                    doc = {}
+                    for k in row.keys():
+                        if k in ("id", "extra_data"):
+                            continue
+                        v = row[k]
+                        if v is None:
+                            doc[k] = ""
+                        elif k in ("sem_cpf", "editavel"):
+                            doc[k] = bool(v)
+                        else:
+                            doc[k] = v
+                    extra_raw = row["extra_data"] if "extra_data" in row.keys() else None
+                    if extra_raw:
+                        try:
+                            extra = json.loads(extra_raw)
+                            for k, v in extra.items():
+                                try:
+                                    doc[k] = json.loads(v) if isinstance(v, str) else v
+                                except (json.JSONDecodeError, ValueError):
+                                    doc[k] = v
+                        except Exception:
+                            pass
+                    if doc.get("numero"):
+                        docs_protocolos.append(doc)
+                if docs_protocolos:
+                    protocolos_coll.delete_many({})
+                    protocolos_coll.insert_many(docs_protocolos)
+
+            # --- Restaurar categorias ---
+            if "categorias" in tables:
+                rows = cur.execute("SELECT * FROM categorias").fetchall()
+                docs_categorias = []
+                for row in rows:
+                    doc = {k: row[k] for k in row.keys() if k != "id" and row[k] is not None}
+                    if doc.get("nome"):
+                        docs_categorias.append(doc)
+                if docs_categorias:
+                    categorias_coll.delete_many({})
+                    categorias_coll.insert_many(docs_categorias)
+
+        finally:
+            conn.close()
+
+        obter_estatisticas_cache.cache_clear()
+        return {"ok": True, "msg": "Backup SQLite restaurado com sucesso."}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Erro ao restaurar backup SQLite: %s", e)
+        raise HTTPException(status_code=500, detail=f"Erro ao restaurar backup SQLite: {str(e)}")
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.unlink(tmp_path)
+            except Exception:
+                pass
 
 # ====================== [BLOCO 18: ENDPOINTS PARA NOTIFICAÇÕES E FILTROS] ======================
 @app.get("/api/notificacoes")

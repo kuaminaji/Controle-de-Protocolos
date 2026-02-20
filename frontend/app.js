@@ -34,7 +34,9 @@ const API_ENDPOINTS = {
   BACKUP: {
     BACKUP: '/api/backup',
     FULL: '/api/backup/full',
-    UPLOAD: '/api/backup/upload'
+    SQLITE: '/api/backup/sqlite',
+    UPLOAD: '/api/backup/upload',
+    UPLOAD_SQLITE: '/api/backup/upload/sqlite'
   },
   CATEGORIA: '/api/categoria',
   CATEGORIAS: '/api/categorias',
@@ -1822,14 +1824,32 @@ function navegar(pagina) {
   conteudo.innerHTML = `
     <div class="form-destacado">
       <h2>Backup e Restauração</h2>
-      <div style="margin-bottom:24px;">
-        <button id="btn-baixar-backup" style="background:#228be6;color:white;">⬇️ Baixar Backup (BD)</button>
+      <div style="margin-bottom:8px;font-weight:600;color:#1a3a5c;">📦 Gerar Backup</div>
+      <div style="margin-bottom:16px;padding:14px;border:1px solid #d0e8ff;background:#f0f8ff;border-radius:8px;">
+        <div style="margin-bottom:8px;font-weight:500;">🍃 MongoDB (JSON)</div>
+        <p style="margin:0 0 10px 0;color:#4b6584;font-size:0.95em;">Exporta os dados do banco em formato JSON compatível com MongoDB. Use para restaurar no sistema com banco MongoDB.</p>
+        <button id="btn-baixar-backup" style="background:#228be6;color:white;">⬇️ Backup MongoDB (JSON)</button>
         <button id="btn-baixar-backup-full" style="background:#0aaa65;color:white;margin-left:12px;">⬇️ Backup Completo (Sistema+BD)</button>
       </div>
-      <div style="margin-bottom:24px;">
-        <input type="file" id="sel-arquivo-backup" style="display:none;">
-        <button id="btn-restaurar-backup" style="background:#21a179;color:white;">⬆️ Restaurar de Backup</button>
+      <div style="margin-bottom:24px;padding:14px;border:1px solid #d5f0e0;background:#f0fff6;border-radius:8px;">
+        <div style="margin-bottom:8px;font-weight:500;">🗃️ SQLite (.db)</div>
+        <p style="margin:0 0 10px 0;color:#4b6584;font-size:0.95em;">Exporta os dados em banco de dados SQLite. Use para importar em uma versão da aplicação com banco SQLite.</p>
+        <button id="btn-baixar-backup-sqlite" style="background:#7c5cbf;color:white;">⬇️ Backup SQLite (.db)</button>
+      </div>
+      <div style="margin-bottom:8px;font-weight:600;color:#1a3a5c;">♻️ Restaurar Backup</div>
+      <div style="margin-bottom:16px;padding:14px;border:1px solid #d0e8ff;background:#f0f8ff;border-radius:8px;">
+        <div style="margin-bottom:8px;font-weight:500;">🍃 Restaurar de Backup MongoDB (JSON)</div>
+        <p style="margin:0 0 10px 0;color:#4b6584;font-size:0.95em;">Restaura dados a partir de um arquivo <code>.json</code> gerado pelo backup MongoDB desta aplicação.</p>
+        <input type="file" id="sel-arquivo-backup" accept=".json" style="display:none;">
+        <button id="btn-restaurar-backup" style="background:#21a179;color:white;">⬆️ Restaurar Backup MongoDB (JSON)</button>
         <span id="backup-restore-status" style="margin-left:12px;"></span>
+      </div>
+      <div style="margin-bottom:24px;padding:14px;border:1px solid #d5f0e0;background:#f0fff6;border-radius:8px;">
+        <div style="margin-bottom:8px;font-weight:500;">🗃️ Restaurar de Backup SQLite (.db)</div>
+        <p style="margin:0 0 10px 0;color:#4b6584;font-size:0.95em;">Restaura dados a partir de um arquivo <code>.db</code> gerado pelo backup SQLite desta aplicação.</p>
+        <input type="file" id="sel-arquivo-backup-sqlite" accept=".db" style="display:none;">
+        <button id="btn-restaurar-backup-sqlite" style="background:#7c5cbf;color:white;">⬆️ Restaurar Backup SQLite (.db)</button>
+        <span id="backup-restore-sqlite-status" style="margin-left:12px;"></span>
       </div>
       ${isAdmin ? `
       <div style="margin:18px 0;padding:14px;border:1px solid #ffeaa7;background:#fff8e1;border-radius:8px;">
@@ -1844,9 +1864,12 @@ function navegar(pagina) {
       <button type="button" id="voltar-menu-backup">← Voltar ao Menu</button>
       <div style="margin-top:12px;font-size:0.97em;color:#637381;">
         <ul style="margin:12px 0 0 25px;padding:0;color:#637381;">
-          <li>O backup do BD exporta apenas os dados do banco (protocolos e usuários).</li>
-          <li>O backup completo exporta <b>toda a aplicação</b> (<code>.zip</code> com código + banco).</li>
-          <li>Para restaurar o sistema completo, extraia o ZIP manualmente na pasta original e reinicie o serviço.</li>
+          <li><b>Backup MongoDB (JSON):</b> exporta dados em formato JSON compatível com MongoDB para restauração nesta aplicação.</li>
+          <li><b>Backup Completo:</b> exporta <b>toda a aplicação</b> (<code>.zip</code> com código + banco MongoDB).</li>
+          <li><b>Backup SQLite (.db):</b> exporta os dados em banco SQLite para uso em versão da aplicação com banco SQLite.</li>
+          <li><b>Restaurar MongoDB (JSON):</b> use o arquivo <code>.json</code> gerado pelo backup MongoDB.</li>
+          <li><b>Restaurar SQLite (.db):</b> use o arquivo <code>.db</code> gerado pelo backup SQLite desta aplicação.</li>
+          <li>Para restaurar o sistema completo (ZIP), extraia manualmente na pasta original e reinicie o serviço.</li>
         </ul>
       </div>
     </div>
@@ -1884,7 +1907,33 @@ function navegar(pagina) {
       });
   };
 
-  // Botão: restaurar backup do BD
+  // Botão: backup SQLite (.db)
+  document.getElementById("btn-baixar-backup-sqlite").onclick = async function() {
+    mostrarLoader("Gerando backup SQLite...");
+    fetchWithAuth('/api/backup/sqlite', {method: 'POST'})
+      .then(resp => {
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const cd = resp.headers.get('Content-Disposition') || '';
+        const match = cd.match(/filename="?([^"]+)"?/);
+        const fname = match ? match[1] : 'backup_sqlite.db';
+        return resp.blob().then(blob => ({ blob, fname }));
+      })
+      .then(({ blob, fname }) => {
+        esconderLoader();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = fname;
+        a.click();
+        window.URL.revokeObjectURL(url);
+      })
+      .catch(() => {
+        esconderLoader();
+        mostrarMensagem("Falha ao gerar backup SQLite!", "erro");
+      });
+  };
+
+  // Botão: restaurar backup do BD (MongoDB JSON)
   document.getElementById("btn-restaurar-backup").onclick = function() {
     document.getElementById("sel-arquivo-backup").click();
   };
@@ -1923,6 +1972,47 @@ function navegar(pagina) {
         esconderLoader();
         document.getElementById("backup-restore-status").textContent = "Erro ao restaurar!";
         mostrarMensagem("Falha ao restaurar backup!","erro");
+      });
+  };
+
+  // Botão: restaurar backup SQLite (.db)
+  document.getElementById("btn-restaurar-backup-sqlite").onclick = function() {
+    document.getElementById("sel-arquivo-backup-sqlite").click();
+  };
+  document.getElementById("sel-arquivo-backup-sqlite").onchange = async function(evt) {
+    const file = evt.target.files[0];
+    if (!file) return;
+
+    const sessao = getSessao();
+    if (!sessao || !sessao.usuario) {
+      mostrarMensagem("Você precisa estar logado para restaurar backup.", "erro");
+      return;
+    }
+
+    const senha = prompt("Digite sua senha de administrador para confirmar a restauração do backup SQLite:");
+    if (!senha) {
+      mostrarMensagem("Restauração cancelada.", "info");
+      return;
+    }
+
+    mostrarLoader("Restaurando backup SQLite...");
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("usuario", sessao.usuario);
+    formData.append("senha", senha);
+
+    fetchWithAuth("/api/backup/upload/sqlite", { method: "POST", body: formData })
+      .then(r => r.json())
+      .then(d => {
+        esconderLoader();
+        document.getElementById("backup-restore-sqlite-status").textContent = d.ok ? "Backup SQLite restaurado!" : `Erro: ${d.detail||d.msg}`;
+        if (d.ok) mostrarMensagem("Backup SQLite restaurado com sucesso.", "sucesso");
+        else mostrarMensagem(d.detail || d.msg, "erro");
+      })
+      .catch(() => {
+        esconderLoader();
+        document.getElementById("backup-restore-sqlite-status").textContent = "Erro ao restaurar!";
+        mostrarMensagem("Falha ao restaurar backup SQLite!", "erro");
       });
   };
 
