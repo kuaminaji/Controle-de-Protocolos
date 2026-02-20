@@ -1993,6 +1993,114 @@ def backup_sqlite():
             except Exception:
                 pass
 
+@app.post("/api/backup/upload/sqlite")
+async def restaurar_backup_sqlite(usuario: str = Body(...), senha: str = Body(...), file: UploadFile = File(...)):
+    """Restaura dados a partir de um arquivo de backup SQLite (.db) gerado por esta aplicação."""
+    user = usuarios_coll.find_one({"usuario": usuario})
+    if not user or not verify_password(senha, user.get("senha", "")) or user.get("tipo") != "admin":
+        raise HTTPException(status_code=403, detail="Apenas administradores podem restaurar backup.")
+    tmp_path = None
+    try:
+        content = await file.read()
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
+
+        conn = sqlite3.connect(tmp_path)
+        try:
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+
+            # Verifica se o arquivo é um SQLite válido com as tabelas esperadas
+            tables = {row[0] for row in cur.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+            if "protocolos" not in tables and "usuarios" not in tables:
+                raise ValueError("Arquivo SQLite inválido: tabelas 'protocolos' e 'usuarios' não encontradas.")
+
+            # --- Restaurar usuarios ---
+            if "usuarios" in tables:
+                rows = cur.execute("SELECT * FROM usuarios").fetchall()
+                docs_usuarios = []
+                for row in rows:
+                    doc = {k: row[k] for k in row.keys() if k not in ("id", "extra_data") and row[k] is not None}
+                    extra_raw = row["extra_data"] if "extra_data" in row.keys() else None
+                    if extra_raw:
+                        try:
+                            extra = json.loads(extra_raw)
+                            for k, v in extra.items():
+                                try:
+                                    doc[k] = json.loads(v) if isinstance(v, str) else v
+                                except (json.JSONDecodeError, ValueError):
+                                    doc[k] = v
+                        except Exception:
+                            pass
+                    if doc.get("usuario"):
+                        docs_usuarios.append(doc)
+                if docs_usuarios:
+                    usuarios_coll.delete_many({})
+                    usuarios_coll.insert_many(docs_usuarios)
+
+            # --- Restaurar protocolos ---
+            if "protocolos" in tables:
+                rows = cur.execute("SELECT * FROM protocolos").fetchall()
+                docs_protocolos = []
+                for row in rows:
+                    doc = {}
+                    for k in row.keys():
+                        if k in ("id", "extra_data"):
+                            continue
+                        v = row[k]
+                        if v is None:
+                            doc[k] = ""
+                        elif k in ("sem_cpf", "editavel"):
+                            doc[k] = bool(v)
+                        else:
+                            doc[k] = v
+                    extra_raw = row["extra_data"] if "extra_data" in row.keys() else None
+                    if extra_raw:
+                        try:
+                            extra = json.loads(extra_raw)
+                            for k, v in extra.items():
+                                try:
+                                    doc[k] = json.loads(v) if isinstance(v, str) else v
+                                except (json.JSONDecodeError, ValueError):
+                                    doc[k] = v
+                        except Exception:
+                            pass
+                    if doc.get("numero"):
+                        docs_protocolos.append(doc)
+                if docs_protocolos:
+                    protocolos_coll.delete_many({})
+                    protocolos_coll.insert_many(docs_protocolos)
+
+            # --- Restaurar categorias ---
+            if "categorias" in tables:
+                rows = cur.execute("SELECT * FROM categorias").fetchall()
+                docs_categorias = []
+                for row in rows:
+                    doc = {k: row[k] for k in row.keys() if k != "id" and row[k] is not None}
+                    if doc.get("nome"):
+                        docs_categorias.append(doc)
+                if docs_categorias:
+                    categorias_coll.delete_many({})
+                    categorias_coll.insert_many(docs_categorias)
+
+        finally:
+            conn.close()
+
+        obter_estatisticas_cache.cache_clear()
+        return {"ok": True, "msg": "Backup SQLite restaurado com sucesso."}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Erro ao restaurar backup SQLite: %s", e)
+        raise HTTPException(status_code=500, detail=f"Erro ao restaurar backup SQLite: {str(e)}")
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.unlink(tmp_path)
+            except Exception:
+                pass
+
 # ====================== [BLOCO 18: ENDPOINTS PARA NOTIFICAÇÕES E FILTROS] ======================
 @app.get("/api/notificacoes")
 def listar_notificacoes(usuario: Optional[str] = Query(default=None)):
