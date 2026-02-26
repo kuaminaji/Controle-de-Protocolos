@@ -64,6 +64,7 @@ Para instruções detalhadas, consulte:
 - **[GUIA_INSTALACAO_WINDOWS.md](GUIA_INSTALACAO_WINDOWS.md)** ⭐ - Guia completo Windows/Linux/macOS (RECOMENDADO)
 - **[GUIA_INSTALACAO_COMPLETO.md](GUIA_INSTALACAO_COMPLETO.md)** - Guia passo a passo com 10 seções
 - **[MONGODB_COMPASS_GUIDE.md](MONGODB_COMPASS_GUIDE.md)** 🧭 - Criar usuário admin no MongoDB Compass
+- **[CONSULTAS_MONGODB.md](CONSULTAS_MONGODB.md)** 🔍 - Consultas úteis no MongoDB Shell (mongosh)
 - **[SECURITY_SETUP.md](SECURITY_SETUP.md)** - Configuração de segurança
 - **[SECURITY_ANALYSIS.md](SECURITY_ANALYSIS.md)** - Análise de segurança completa
 
